@@ -1,10 +1,10 @@
 export const firebaseConfig = {
-  "projectId": "studio-9081894834-5f9ce",
-  "appId": "1:9321679669:web:876fb18f2cbbe1759c9a7c",
-  "apiKey": "AIzaSyDnlC_BLls5QxyoE-8TY7ZsIf4BhSu8aIs",
-  "authDomain": "studio-9081894834-5f9ce.firebaseapp.com",
-  "measurementId": "",
-  "messagingSenderId": "9321679669"
+  "projectId": process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
+  "appId": process.env.NEXT_PUBLIC_FIREBASE_APP_ID!,
+  "apiKey": process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
+  "authDomain": process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN!,
+  "measurementId": process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "",
+  "messagingSenderId": process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!
 };
 
 // This is the VAPID key for web push notifications
