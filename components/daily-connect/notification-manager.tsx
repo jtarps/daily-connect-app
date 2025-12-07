@@ -87,11 +87,18 @@ export function NotificationManager() {
   // For example, if permission is 'prompt', render a button to request it.
   if (notificationPermission === 'prompt') {
       return (
-          <div className="fixed bottom-20 right-4 z-50">
+          <div className="fixed bottom-24 right-4 z-[100] sm:bottom-20">
               <div className="bg-background border rounded-lg shadow-lg p-4 max-w-sm">
                   <p className="text-sm font-medium">Enable Notifications</p>
                   <p className="text-sm text-muted-foreground mt-1 mb-3">Get reminders and alerts from your circle.</p>
-                  <Button onClick={requestPermission} size="sm" className="w-full">Enable</Button>
+                  <Button 
+                      onClick={requestPermission} 
+                      size="lg" 
+                      className="w-full touch-manipulation min-h-[44px] text-base"
+                      style={{ WebkitTapHighlightColor: 'transparent' }}
+                  >
+                      Enable
+                  </Button>
               </div>
           </div>
       )

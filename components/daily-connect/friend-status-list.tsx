@@ -4,11 +4,15 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import FriendStatusCard from "./friend-status-card";
-import { useUser } from "@/firebase/provider";
+import { useUser, useFirestore } from "@/firebase/provider";
 import { useUserCircles } from "@/hooks/use-circles";
-import { Loader, Plus, Settings, UserPlus } from "lucide-react";
+import { Loader, Plus, Settings, UserPlus, Bell } from "lucide-react";
 import { CircleManagerDialog } from "./create-circle-dialog";
 import { Button } from "../ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { sendRemindersToInactiveMembers } from "@/app/actions";
+import { doc, getDoc } from "firebase/firestore";
+import type { User } from "@/lib/data";
 import {
   Select,
   SelectContent,
@@ -19,8 +23,11 @@ import {
 
 const FriendStatusList = () => {
     const { user } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
     const { circles, isLoading: isLoadingCircles } = useUserCircles(user?.uid);
     const [selectedCircleId, setSelectedCircleId] = useState<string | null>(null);
+    const [isSendingReminders, setIsSendingReminders] = useState(false);
 
     // Set default to first circle when circles load
     const currentCircle = circles?.find(c => c.id === selectedCircleId) || circles?.[0];
@@ -76,6 +83,42 @@ const FriendStatusList = () => {
     }
 
 
+  const handleSendRemindersToInactive = async () => {
+    if (!currentCircle || !user || !firestore) return;
+    
+    setIsSendingReminders(true);
+    try {
+      // Get current user's name
+      const currentUserDocRef = doc(firestore, "users", user.uid);
+      const currentUserDoc = await getDoc(currentUserDocRef);
+      const currentUserData = currentUserDoc.data() as User | undefined;
+      const senderName = currentUserData 
+        ? `${currentUserData.firstName} ${currentUserData.lastName}` 
+        : 'Someone';
+
+      const response = await sendRemindersToInactiveMembers({
+        circleId: currentCircle.id,
+        senderId: user.uid,
+        senderName: senderName,
+      });
+
+      toast({
+        title: response.success ? "Reminders Sent!" : "Reminders Failed",
+        description: response.message,
+        variant: response.success ? "default" : "destructive",
+      });
+    } catch (error) {
+      console.error("Failed to send reminders:", error);
+      toast({
+        title: "Error",
+        description: "Could not send reminders. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingReminders(false);
+    }
+  };
+
   // Update selected circle when circles load or when a new circle is added
   useEffect(() => {
     if (circles && circles.length > 0) {
@@ -122,20 +165,36 @@ const FriendStatusList = () => {
             <CardDescription>See the latest check-ins from your friends and family.</CardDescription>
         </div>
         <div className="flex items-center gap-2">
+            {currentCircle && (
+                <>
+                    <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={handleSendRemindersToInactive}
+                        disabled={isSendingReminders}
+                        title="Remind all inactive members"
+                    >
+                        {isSendingReminders ? (
+                            <Loader className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <Bell className="h-4 w-4" />
+                        )}
+                        <span className="sr-only">Remind All Inactive</span>
+                    </Button>
+                    <CircleManagerDialog circle={currentCircle} mode="edit">
+                        <Button variant="outline" size="icon">
+                            <Settings className="h-4 w-4" />
+                            <span className="sr-only">Manage Members</span>
+                        </Button>
+                    </CircleManagerDialog>
+                </>
+            )}
             <CircleManagerDialog mode="create">
                 <Button variant="outline" size="icon">
                     <Plus className="h-4 w-4" />
                     <span className="sr-only">Create New Circle</span>
                 </Button>
             </CircleManagerDialog>
-            {currentCircle && (
-                <CircleManagerDialog circle={currentCircle} mode="edit">
-                    <Button variant="outline" size="icon">
-                        <Settings className="h-4 w-4" />
-                        <span className="sr-only">Manage Members</span>
-                    </Button>
-                </CircleManagerDialog>
-            )}
         </div>
       </CardHeader>
       <CardContent>
