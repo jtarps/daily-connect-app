@@ -42,13 +42,17 @@ export default function LandingPage() {
         <p className="text-muted-foreground mb-8">
           A simple way to let your loved ones know you&apos;re okay, every day.
         </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button asChild size="lg" className="w-full sm:w-auto">
-                <Link href="/login">Login</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                <Link href="/signup">Sign Up</Link>
-            </Button>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Link href="/login">
+                <Button size="lg" className="w-full sm:w-auto min-w-[120px]">
+                    Login
+                </Button>
+            </Link>
+            <Link href="/signup">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto min-w-[120px]">
+                    Sign Up
+                </Button>
+            </Link>
         </div>
       </div>
     </div>
