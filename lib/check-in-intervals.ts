@@ -28,6 +28,11 @@ export const CHECK_IN_INTERVALS: Record<CheckInInterval, CheckInIntervalConfig> 
     description: 'Check in once per week',
     hours: 168, // 7 days * 24 hours
   },
+  'custom': {
+    label: 'Custom',
+    description: 'Set your own interval (1-168 hours)',
+    hours: 24, // Default, but will be overridden by customHours
+  },
 };
 
 export function getDefaultInterval(): CheckInInterval {

@@ -134,16 +134,32 @@ const CheckInCard = () => {
 
         // Calculate streak based on interval
         if (latestCheckInDate) {
-          if (interval === "daily" || interval === "weekly") {
+          if (interval === "daily") {
             const daysDifference = differenceInCalendarDays(
               now,
               latestCheckInDate
             );
             if (daysDifference === 1) {
-              // Consecutive period
+              // Consecutive day
               currentStreak += 1;
             } else if (daysDifference > 1) {
-              // Missed a period
+              // Missed a day
+              currentStreak = 1;
+            }
+          } else if (interval === "weekly") {
+            const daysDifference = differenceInCalendarDays(
+              now,
+              latestCheckInDate
+            );
+            if (daysDifference <= 7) {
+              // Within the same week or next week - increment streak
+              // For weekly, we allow flexibility - any check-in within 7 days maintains/increments streak
+              if (daysDifference > 0) {
+                currentStreak += 1;
+              }
+              // If daysDifference === 0, it's the same day, so don't increment but maintain streak
+            } else {
+              // More than 7 days passed - reset streak
               currentStreak = 1;
             }
           } else {

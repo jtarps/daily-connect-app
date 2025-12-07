@@ -83,7 +83,7 @@ export async function sendReminder(input: ReminderInput) {
               link: '/check-in',
             },
             notification: {
-              icon: '/logo-192.png',
+              icon: '/icon-192.png',
             }
           },
           tokens: tokens,
@@ -216,7 +216,7 @@ export async function sendRemindersToInactiveMembers(input: SendRemindersToInact
                                     link: '/check-in',
                                 },
                                 notification: {
-                                    icon: '/logo-192.png',
+                                    icon: '/icon-192.png',
                                 }
                             },
                             tokens: tokens,
@@ -348,7 +348,7 @@ export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
                     link: '/circle',
                 },
                 notification: {
-                    icon: '/logo-192.png',
+                    icon: '/icon-192.png',
                 }
             },
             tokens: allTokens,
