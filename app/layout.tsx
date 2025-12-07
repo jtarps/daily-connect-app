@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { NotificationManager } from '@/components/daily-connect/notification-manager';
 import { PWAInstallPrompt } from '@/components/daily-connect/pwa-install-prompt';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { ErrorBoundary } from '@/components/error-boundary';
 
 const ptSans = PT_Sans({
   weight: ['400', '700'],
@@ -49,11 +51,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="light">
       <body className={`${ptSans.variable} font-body antialiased`}>
-        <FirebaseClientProvider>
-          {children}
-          <NotificationManager />
-          <PWAInstallPrompt />
-        </FirebaseClientProvider>
+        <ErrorBoundary>
+          <FirebaseClientProvider>
+            {children}
+            <NotificationManager />
+            <PWAInstallPrompt />
+          </FirebaseClientProvider>
+        </ErrorBoundary>
         <Toaster />
       </body>
     </html>

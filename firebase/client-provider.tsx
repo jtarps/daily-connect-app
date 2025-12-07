@@ -22,10 +22,10 @@ function initializeFirebase() {
       // Fall back to explicit config
       // Validate config before using it
       if (!firebaseConfig.apiKey || firebaseConfig.apiKey.trim() === '') {
-        const error = new Error(
-          'Firebase API key is missing. Please check your .env.local file and ensure NEXT_PUBLIC_FIREBASE_API_KEY is set. ' +
-          'Restart your dev server after adding environment variables.'
-        );
+        const errorMessage = process.env.NODE_ENV === 'production'
+          ? 'Firebase API key is missing. Please check your Vercel environment variables and ensure NEXT_PUBLIC_FIREBASE_API_KEY is set.'
+          : 'Firebase API key is missing. Please check your .env.local file and ensure NEXT_PUBLIC_FIREBASE_API_KEY is set. Restart your dev server after adding environment variables.';
+        const error = new Error(errorMessage);
         console.error(error);
         throw error;
       }
@@ -61,8 +61,20 @@ interface FirebaseClientProviderProps {
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {
-    // Initialize Firebase on the client side, once per component mount.
-    return initializeFirebase();
+    try {
+      // Initialize Firebase on the client side, once per component mount.
+      return initializeFirebase();
+    } catch (error) {
+      // Log error but don't crash the app
+      console.error('Failed to initialize Firebase:', error);
+      // Return null services - components should handle this gracefully
+      return {
+        firebaseApp: null,
+        auth: null,
+        firestore: null,
+        messaging: null,
+      };
+    }
   }, []); // Empty dependency array ensures this runs only once on mount
 
   return (

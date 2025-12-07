@@ -10,9 +10,9 @@ import { Messaging } from 'firebase/messaging';
 
 interface FirebaseProviderProps {
   children: ReactNode;
-  firebaseApp: FirebaseApp;
-  firestore: Firestore;
-  auth: Auth;
+  firebaseApp: FirebaseApp | null;
+  firestore: Firestore | null;
+  auth: Auth | null;
   messaging: Messaging | null;
 }
 
