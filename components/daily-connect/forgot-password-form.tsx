@@ -40,6 +40,14 @@ export default function ForgotPasswordForm() {
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!auth) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Firebase is not available. Please refresh the page.',
+      });
+      return;
+    }
     try {
       await sendPasswordResetEmail(auth, values.email);
       setEmailSent(true);

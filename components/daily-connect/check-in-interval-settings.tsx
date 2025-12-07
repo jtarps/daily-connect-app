@@ -36,7 +36,7 @@ export function CheckInIntervalSettings() {
   const [isSaving, setIsSaving] = useState(false);
 
   const userDocRef = useMemoFirebase(() => {
-    if (!user) return null;
+    if (!user || !firestore) return null;
     return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
 

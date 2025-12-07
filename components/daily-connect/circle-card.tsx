@@ -31,6 +31,14 @@ export function CircleCard({ circle }: CircleCardProps) {
     setIsSendingReminders(true);
     try {
       // Get current user's name
+      if (!firestore) {
+        toast({
+          title: "Error",
+          description: "Firebase is not available. Please refresh the page.",
+          variant: "destructive",
+        });
+        return;
+      }
       const currentUserDocRef = doc(firestore, "users", user.uid);
       const currentUserDoc = await getDoc(currentUserDocRef);
       const currentUserData = currentUserDoc.data() as User | undefined;

@@ -2,8 +2,15 @@
 function getRequiredEnvVar(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() === '') {
+    // During build time, don't throw - just return empty string
+    // This allows the build to complete even if env vars aren't set
     if (typeof window === 'undefined') {
-      // Server-side: throw error
+      // Server-side during build: return empty string to allow build to complete
+      // The actual validation will happen at runtime
+      if (process.env.NEXT_PHASE === 'phase-production-build') {
+        return '';
+      }
+      // Server-side at runtime: throw error
       throw new Error(
         `Missing required environment variable: ${name}. ` +
         `Please check your .env.local file and ensure all NEXT_PUBLIC_FIREBASE_* variables are set.`

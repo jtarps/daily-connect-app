@@ -37,7 +37,7 @@ const PendingInvitations = ({ email }: { email: string }) => {
     const { toast } = useToast();
 
     const invitationsQuery = useMemoFirebase(() => {
-        if (!email) return null;
+        if (!email || !firestore) return null;
         return query(
             collection(firestore, 'invitations'),
             where('inviteeEmail', '==', email)
@@ -47,7 +47,7 @@ const PendingInvitations = ({ email }: { email: string }) => {
     const { data: myInvitations, isLoading, error } = useCollection<Invitation>(invitationsQuery);
     
     const handleAccept = async (invitation: Invitation) => {
-        if (!user) return;
+        if (!user || !firestore) return;
         
         const circleRef = doc(firestore, 'circles', invitation.circleId);
         const invitationRef = doc(firestore, 'invitations', invitation.id);
@@ -80,6 +80,7 @@ const PendingInvitations = ({ email }: { email: string }) => {
     };
     
     const handleDecline = async (invitation: Invitation) => {
+        if (!firestore) return;
         const invitationRef = doc(firestore, 'invitations', invitation.id);
         deleteDoc(invitationRef).catch(async (serverError) => {
              const permissionError = new FirestorePermissionError({

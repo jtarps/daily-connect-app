@@ -82,6 +82,14 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
         return;
     };
     
+    if (!firestore) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Firebase is not available. Please refresh the page.',
+      });
+      return;
+    }
     const invitationsRef = collection(firestore, 'invitations');
     let invitesSent = 0;
 
@@ -129,6 +137,10 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
     try {
         if (isEditMode && circle) {
             // EDIT MODE
+            if (!firestore) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Firebase is not available. Please refresh the page.' });
+                return;
+            }
             const circleRef = doc(firestore, 'circles', circle.id);
             if (circle.name !== circleName) {
                 await updateDoc(circleRef, { name: circleName }).catch(async (serverError) => {
@@ -152,6 +164,10 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
                 memberIds: [user.uid], // Start with just the owner
             };
 
+            if (!firestore) {
+                toast({ variant: 'destructive', title: 'Error', description: 'Firebase is not available. Please refresh the page.' });
+                return;
+            }
             const circleRef = await addDoc(collection(firestore, 'circles'), circleData).catch(async (serverError) => {
                 const permissionError = new FirestorePermissionError({
                     path: 'circles',

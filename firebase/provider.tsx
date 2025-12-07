@@ -121,6 +121,7 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
 /**
  * Hook to access core Firebase services and user authentication state.
  * Throws error if core services are not available or used outside provider.
+ * During SSR, services will be null - components should handle this gracefully.
  */
 export const useFirebase = (): FirebaseServicesAndUser => {
   const context = useContext(FirebaseContext);
@@ -129,12 +130,28 @@ export const useFirebase = (): FirebaseServicesAndUser => {
     throw new Error('useFirebase must be used within a FirebaseProvider.');
   }
 
+  // During SSR or when services aren't available, return null values
+  // Components should check for null before using services
   if (!context.areServicesAvailable || !context.firebaseApp || !context.firestore || !context.auth) {
-    const isProduction = process.env.NODE_ENV === 'production';
-    const errorMessage = isProduction
-      ? 'Firebase core services not available. This usually means Firebase environment variables are missing in Vercel. Please check your Vercel project settings (Settings → Environment Variables) and ensure all NEXT_PUBLIC_FIREBASE_* variables are set: NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID, NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID.'
-      : 'Firebase core services not available. Check FirebaseProvider props and ensure all NEXT_PUBLIC_FIREBASE_* environment variables are set in your .env.local file.';
-    throw new Error(errorMessage);
+    // Only throw error in browser (client-side) - during SSR, return null values
+    if (typeof window !== 'undefined') {
+      const isProduction = process.env.NODE_ENV === 'production';
+      const errorMessage = isProduction
+        ? 'Firebase core services not available. This usually means Firebase environment variables are missing in Vercel. Please check your Vercel project settings (Settings → Environment Variables) and ensure all NEXT_PUBLIC_FIREBASE_* variables are set: NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID, NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID.'
+        : 'Firebase core services not available. Check FirebaseProvider props and ensure all NEXT_PUBLIC_FIREBASE_* environment variables are set in your .env.local file.';
+      throw new Error(errorMessage);
+    }
+    
+    // During SSR, return null values instead of throwing
+    return {
+      firebaseApp: null as any,
+      firestore: null as any,
+      auth: null as any,
+      messaging: null,
+      user: null,
+      isUserLoading: false,
+      userError: null,
+    };
   }
 
   return {
@@ -149,19 +166,19 @@ export const useFirebase = (): FirebaseServicesAndUser => {
 };
 
 /** Hook to access Firebase Auth instance. */
-export const useAuth = (): Auth => {
+export const useAuth = (): Auth | null => {
   const { auth } = useFirebase();
   return auth;
 };
 
 /** Hook to access Firestore instance. */
-export const useFirestore = (): Firestore => {
+export const useFirestore = (): Firestore | null => {
   const { firestore } = useFirebase();
   return firestore;
 };
 
 /** Hook to access Firebase App instance. */
-export const useFirebaseApp = (): FirebaseApp => {
+export const useFirebaseApp = (): FirebaseApp | null => {
   const { firebaseApp } = useFirebase();
   return firebaseApp;
 };
@@ -188,8 +205,18 @@ export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T | 
  * Hook specifically for accessing the authenticated user's state.
  * This provides the User object, loading status, and any auth errors.
  * @returns {UserHookResult} Object with user, isUserLoading, userError.
+ * During SSR, returns null user and false loading state.
  */
 export const useUser = (): UserHookResult => { // Renamed from useAuthUser
-  const { user, isUserLoading, userError } = useFirebase(); // Leverages the main hook
-  return { user, isUserLoading, userError };
+  try {
+    const { user, isUserLoading, userError } = useFirebase(); // Leverages the main hook
+    return { user, isUserLoading, userError };
+  } catch (error) {
+    // During SSR or when Firebase isn't available, return safe defaults
+    if (typeof window === 'undefined') {
+      return { user: null, isUserLoading: false, userError: null };
+    }
+    // Re-throw in browser if it's a real error
+    throw error;
+  }
 };

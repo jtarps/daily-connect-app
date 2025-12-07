@@ -47,7 +47,7 @@ const CheckInCard = () => {
   const { user, isUserLoading } = useUser();
 
   const checkInsQuery = useMemoFirebase(() => {
-    if (!user) return null;
+    if (!user || !firestore) return null;
     return query(
       collection(firestore, "users", user.uid, "checkIns"),
       orderBy("timestamp", "desc"),
@@ -61,7 +61,7 @@ const CheckInCard = () => {
 
   // Get user document to access check-in interval
   const userDocRef = useMemoFirebase(() => {
-    if (!user) return null;
+    if (!user || !firestore) return null;
     return doc(firestore, "users", user.uid);
   }, [firestore, user]);
   const { data: userData } = useDoc<User>(userDocRef);
@@ -69,10 +69,18 @@ const CheckInCard = () => {
   const customHours = userData?.customCheckInHours;
 
   const performCheckIn = useCallback(async () => {
-    if (!user) {
+    if (!user || !firestore) {
       toast({
         title: "Error",
         description: "You must be logged in to check in.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!firestore) {
+      toast({
+        title: "Error",
+        description: "Firebase is not available. Please refresh the page.",
         variant: "destructive",
       });
       return;

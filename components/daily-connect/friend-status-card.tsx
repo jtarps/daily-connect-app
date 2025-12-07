@@ -28,11 +28,15 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
 
 
   // Fetch friend's user data
-  const userDocRef = useMemoFirebase(() => doc(firestore, "users", userId), [firestore, userId]);
+  const userDocRef = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return doc(firestore, "users", userId);
+  }, [firestore, userId]);
   const { data: friend, isLoading: isLoadingFriend } = useDoc<User>(userDocRef);
 
   // Fetch friend's latest check-in
   const checkInsQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
     return query(
         collection(firestore, 'users', userId, 'checkIns'), 
         orderBy('timestamp', 'desc'), 
@@ -44,7 +48,7 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
   const lastCheckIn = latestCheckIns?.[0];
 
   const handleSendReminder = async () => {
-    if (!friend || !currentUser) return;
+    if (!friend || !currentUser || !firestore) return;
     setIsSending(true);
     try {
         // Get current user's name from Firestore
