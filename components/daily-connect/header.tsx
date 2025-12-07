@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Users, Bell, Home, LogOut } from 'lucide-react';
+import { Users, Bell, Home, LogOut, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { signOut } from 'firebase/auth';
 import { CheckInIntervalSettings } from './check-in-interval-settings';
+import { usePWAInstall } from './pwa-install-prompt';
 
 const navItems = [
     { href: "/check-in", label: "Check-in", icon: Home },
@@ -29,6 +30,7 @@ const Header = () => {
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const { canInstall, handleInstall } = usePWAInstall();
 
   const handleSignOut = async () => {
     if (!auth) return;
@@ -78,6 +80,17 @@ const Header = () => {
 
         <div className="flex items-center gap-2 sm:gap-4">
           <CheckInIntervalSettings />
+          {canInstall && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              aria-label="Install App"
+              onClick={handleInstall}
+              title="Install Daily Connect"
+            >
+              <Download className="h-5 w-5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" aria-label="Notifications">
             <Bell className="h-5 w-5" />
           </Button>

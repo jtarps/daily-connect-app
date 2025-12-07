@@ -1,17 +1,44 @@
 
 'use client';
 
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUser } from "@/firebase/provider";
 import { useUserCircles } from "@/hooks/use-circles";
-import { Loader, Plus } from "lucide-react";
+import { Loader, Plus, Search } from "lucide-react";
 import { CircleManagerDialog } from "./create-circle-dialog";
 import { Button } from "../ui/button";
 import { CircleCard } from "./circle-card";
+import { Input } from "../ui/input";
 
 const FriendStatusList = () => {
     const { user } = useUser();
     const { circles, isLoading: isLoadingCircles } = useUserCircles(user?.uid);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // Filter circles based on search query
+    const filteredCircles = useMemo(() => {
+        if (!circles) return [];
+        if (!searchQuery.trim()) return circles;
+        
+        const query = searchQuery.toLowerCase().trim();
+        return circles.filter(circle => 
+            circle.name.toLowerCase().includes(query)
+        );
+    }, [circles, searchQuery]);
+
+    // Scroll to a specific circle
+    const scrollToCircle = (circleId: string) => {
+        const element = document.getElementById(`circle-${circleId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Highlight the circle briefly
+            element.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
+            setTimeout(() => {
+                element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
+            }, 2000);
+        }
+    };
 
     const renderContent = () => {
         if (isLoadingCircles) {
@@ -36,10 +63,27 @@ const FriendStatusList = () => {
             );
         }
 
+        if (filteredCircles.length === 0) {
+            return (
+                <div className="text-center text-muted-foreground p-8">
+                    <p>No circles found matching &quot;{searchQuery}&quot;</p>
+                    <Button 
+                        variant="outline" 
+                        className="mt-4"
+                        onClick={() => setSearchQuery('')}
+                    >
+                        Clear Search
+                    </Button>
+                </div>
+            );
+        }
+
         return (
             <div className="space-y-4">
-                {circles.map((circle) => (
-                    <CircleCard key={circle.id} circle={circle} />
+                {filteredCircles.map((circle) => (
+                    <div key={circle.id} id={`circle-${circle.id}`}>
+                        <CircleCard circle={circle} />
+                    </div>
                 ))}
             </div>
         );
@@ -65,7 +109,36 @@ const FriendStatusList = () => {
             </CircleManagerDialog>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {circles && circles.length > 1 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search circles..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        )}
+        {circles && circles.length > 1 && searchQuery && (
+          <div className="flex flex-wrap gap-2">
+            {filteredCircles.map((circle) => (
+              <Button
+                key={circle.id}
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  scrollToCircle(circle.id);
+                  setSearchQuery('');
+                }}
+              >
+                {circle.name}
+              </Button>
+            ))}
+          </div>
+        )}
         {renderContent()}
       </CardContent>
     </Card>

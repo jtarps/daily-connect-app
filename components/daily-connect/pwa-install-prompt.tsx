@@ -9,20 +9,21 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-export function PWAInstallPrompt() {
+// Hook to manage PWA install state
+export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
 
   useEffect(() => {
     // Check if app is already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+    if (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true);
       return;
     }
 
     // Register service worker
-    if ('serviceWorker' in navigator) {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
@@ -37,26 +38,45 @@ export function PWAInstallPrompt() {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setShowPrompt(true);
+      setCanInstall(true);
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    }
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      }
     };
   }, []);
 
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+  const handleInstall = async () => {
+    if (!deferredPrompt) {
+      // Fallback: Show instructions for manual install
+      if (typeof window !== 'undefined') {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        
+        if (isIOS) {
+          alert('To install: Tap the Share button and select "Add to Home Screen"');
+        } else if (isAndroid) {
+          alert('To install: Tap the menu (⋮) and select "Install app" or "Add to Home screen"');
+        } else {
+          alert('To install: Look for an install icon in your browser\'s address bar, or check the browser menu.');
+        }
+      }
+      return;
+    }
 
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
 
     if (outcome === 'accepted') {
       console.log('User accepted the install prompt');
-      setShowPrompt(false);
       setIsInstalled(true);
+      setCanInstall(false);
     } else {
       console.log('User dismissed the install prompt');
     }
@@ -64,14 +84,35 @@ export function PWAInstallPrompt() {
     setDeferredPrompt(null);
   };
 
+  return {
+    canInstall: canInstall || !isInstalled, // Show install option if not installed
+    isInstalled,
+    handleInstall,
+  };
+}
+
+// Auto-prompt component (for new users)
+export function PWAInstallPrompt() {
+  const { canInstall, isInstalled, handleInstall } = usePWAInstall();
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  useEffect(() => {
+    // Only auto-show if we have the prompt event and haven't dismissed it
+    if (canInstall && !isInstalled && !sessionStorage.getItem('pwa-prompt-dismissed')) {
+      // Delay showing the prompt slightly
+      const timer = setTimeout(() => {
+        setShowPrompt(true);
+      }, 3000); // Show after 3 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [canInstall, isInstalled]);
+
   const handleDismiss = () => {
     setShowPrompt(false);
-    // Don't show again for this session
     sessionStorage.setItem('pwa-prompt-dismissed', 'true');
   };
 
-  // Don't show if already installed or dismissed this session
-  if (isInstalled || !showPrompt || sessionStorage.getItem('pwa-prompt-dismissed')) {
+  if (isInstalled || !showPrompt) {
     return null;
   }
 
@@ -96,7 +137,7 @@ export function PWAInstallPrompt() {
         </div>
         <div className="flex gap-2">
           <Button
-            onClick={handleInstallClick}
+            onClick={handleInstall}
             size="sm"
             className="flex-1 touch-manipulation min-h-[44px]"
           >
@@ -116,4 +157,3 @@ export function PWAInstallPrompt() {
     </div>
   );
 }
-

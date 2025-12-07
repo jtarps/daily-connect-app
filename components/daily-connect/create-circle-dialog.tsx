@@ -14,13 +14,24 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X, Plus, UserPlus } from 'lucide-react';
+import { X, Plus, UserPlus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Circle } from '@/lib/data';
 import { useFirestore, useUser } from '@/firebase/provider';
-import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 
 interface CircleManagerDialogProps {
@@ -34,11 +45,13 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
   const [circleName, setCircleName] = useState('');
   const [membersToInvite, setMembersToInvite] = useState<string[]>(['']);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user } = useUser();
   
   const isEditMode = mode === 'edit';
+  const isOwner = isEditMode && circle && user?.uid === circle.ownerId;
 
   useEffect(() => {
     if (open) {
@@ -198,6 +211,47 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
     }
   };
 
+  const handleDeleteCircle = async () => {
+    if (!circle || !user || !firestore) return;
+    
+    if (user.uid !== circle.ownerId) {
+      toast({
+        title: "Permission Denied",
+        description: "Only the circle owner can delete this circle.",
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const circleRef = doc(firestore, 'circles', circle.id);
+      await deleteDoc(circleRef).catch(async (serverError) => {
+        const permissionError = new FirestorePermissionError({
+          path: circleRef.path,
+          operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw permissionError;
+      });
+
+      toast({
+        title: "Circle Deleted",
+        description: `"${circle.name}" has been deleted.`,
+      });
+      setOpen(false);
+    } catch (error) {
+      console.error("Error deleting circle: ", error);
+      toast({
+        title: "Error",
+        description: "Could not delete the circle. Please try again.",
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -251,8 +305,42 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
             </div>
           </div>
         </div>
-        <DialogFooter>
-          <Button onClick={handleSaveCircle} disabled={isSaving}>
+        <DialogFooter className="flex justify-between items-center">
+          <div>
+            {isEditMode && isOwner && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    disabled={isDeleting || isSaving}
+                    className="gap-2"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {isDeleting ? 'Deleting...' : 'Delete Circle'}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete &quot;{circle?.name}&quot; and remove all members from this circle. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteCircle}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+          <Button onClick={handleSaveCircle} disabled={isSaving || isDeleting}>
             {isSaving ? 'Saving...' : (isEditMode ? 'Send Invites' : 'Create Circle & Invite')}
           </Button>
         </DialogFooter>
