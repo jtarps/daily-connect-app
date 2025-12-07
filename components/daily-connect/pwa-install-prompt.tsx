@@ -14,8 +14,11 @@ export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [canInstall, setCanInstall] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true);
+    
     // Check if app is already installed
     if (typeof window !== 'undefined' && window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true);
@@ -85,7 +88,7 @@ export function usePWAInstall() {
   };
 
   return {
-    canInstall: canInstall || !isInstalled, // Show install option if not installed
+    canInstall: isClient && (canInstall || !isInstalled), // Show install option if not installed and on client
     isInstalled,
     handleInstall,
   };
@@ -97,8 +100,12 @@ export function PWAInstallPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+    
     // Only auto-show if we have the prompt event and haven't dismissed it
-    if (canInstall && !isInstalled && !sessionStorage.getItem('pwa-prompt-dismissed')) {
+    const wasDismissed = sessionStorage.getItem('pwa-prompt-dismissed');
+    if (canInstall && !isInstalled && !wasDismissed) {
       // Delay showing the prompt slightly
       const timer = setTimeout(() => {
         setShowPrompt(true);

@@ -29,6 +29,7 @@ const FriendStatusList = () => {
 
     // Scroll to a specific circle
     const scrollToCircle = (circleId: string) => {
+        if (typeof window === 'undefined') return;
         const element = document.getElementById(`circle-${circleId}`);
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
