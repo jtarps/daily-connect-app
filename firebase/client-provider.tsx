@@ -70,6 +70,25 @@ interface FirebaseClientProviderProps {
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
   const firebaseServices = useMemo(() => {
     try {
+      // Debug: Log environment variable presence (without exposing values)
+      if (typeof window !== 'undefined') {
+        const envVars = {
+          hasProjectId: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+          hasAppId: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+          hasApiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+          hasAuthDomain: !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+          hasMessagingSenderId: !!process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+        };
+        console.log('Firebase env vars check:', envVars);
+        console.log('Firebase config values:', {
+          projectId: firebaseConfig.projectId ? `${firebaseConfig.projectId.substring(0, 10)}...` : 'MISSING',
+          appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 10)}...` : 'MISSING',
+          apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'MISSING',
+          authDomain: firebaseConfig.authDomain ? `${firebaseConfig.authDomain.substring(0, 20)}...` : 'MISSING',
+          messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING',
+        });
+      }
+      
       // Initialize Firebase on the client side, once per component mount.
       return initializeFirebase();
     } catch (error) {
