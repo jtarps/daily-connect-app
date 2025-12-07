@@ -12,7 +12,7 @@ export interface UserAuthHookResult {
 
 export function useUser(): UserAuthHookResult {
   const auth = useAuth();
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [user, setUser] = useState<User | null>(auth?.currentUser || null);
   const [isUserLoading, setIsUserLoading] = useState(true);
 
   useEffect(() => {
@@ -23,6 +23,7 @@ export function useUser(): UserAuthHookResult {
       });
       return () => unsubscribe();
     } else {
+      setUser(null);
       setIsUserLoading(false);
     }
   }, [auth]);
