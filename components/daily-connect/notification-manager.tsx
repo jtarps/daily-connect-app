@@ -16,11 +16,6 @@ export function NotificationManager() {
   const { toast } = useToast();
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'prompt' | 'unsupported'>('prompt');
 
-  // Don't show notification prompt if user is not logged in
-  if (!user) {
-    return null;
-  }
-
   // Effect to listen for incoming foreground messages
   useEffect(() => {
     if (!messaging) return;
@@ -86,6 +81,11 @@ export function NotificationManager() {
         window.location.reload(); 
       }
     }
+  }
+
+  // Don't show notification prompt if user is not logged in
+  if (!user) {
+    return null;
   }
 
   // This component doesn't render anything itself, but it could render a UI for managing notifications.
