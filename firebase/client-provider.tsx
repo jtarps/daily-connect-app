@@ -20,11 +20,19 @@ function initializeFirebase() {
       firebaseApp = initializeApp();
     } catch (e) {
       // Fall back to explicit config
-      // Validate config before using it
-      if (!firebaseConfig.apiKey || firebaseConfig.apiKey.trim() === '') {
-        const errorMessage = process.env.NODE_ENV === 'production'
-          ? 'Firebase API key is missing. Please check your Vercel environment variables and ensure NEXT_PUBLIC_FIREBASE_API_KEY is set.'
-          : 'Firebase API key is missing. Please check your .env.local file and ensure NEXT_PUBLIC_FIREBASE_API_KEY is set. Restart your dev server after adding environment variables.';
+      // Validate all required config values before using it
+      const missingVars: string[] = [];
+      if (!firebaseConfig.apiKey || firebaseConfig.apiKey.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_API_KEY');
+      if (!firebaseConfig.projectId || firebaseConfig.projectId.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
+      if (!firebaseConfig.appId || firebaseConfig.appId.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_APP_ID');
+      if (!firebaseConfig.authDomain || firebaseConfig.authDomain.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN');
+      if (!firebaseConfig.messagingSenderId || firebaseConfig.messagingSenderId.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID');
+      
+      if (missingVars.length > 0) {
+        const isProduction = process.env.NODE_ENV === 'production';
+        const errorMessage = isProduction
+          ? `Firebase configuration is missing. Missing environment variables: ${missingVars.join(', ')}. Please check your Vercel project settings (Settings → Environment Variables) and ensure all NEXT_PUBLIC_FIREBASE_* variables are set.`
+          : `Firebase configuration is missing. Missing environment variables: ${missingVars.join(', ')}. Please check your .env.local file and ensure all NEXT_PUBLIC_FIREBASE_* variables are set. Restart your dev server after adding environment variables.`;
         const error = new Error(errorMessage);
         console.error(error);
         throw error;

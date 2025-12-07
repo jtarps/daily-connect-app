@@ -9,8 +9,12 @@ function getRequiredEnvVar(name: string): string {
         `Please check your .env.local file and ensure all NEXT_PUBLIC_FIREBASE_* variables are set.`
       );
     } else {
-      // Client-side: log warning and return empty string (will cause Firebase to error with a clearer message)
-      console.error(`Missing required environment variable: ${name}`);
+      // Client-side: log detailed warning
+      const isProduction = process.env.NODE_ENV === 'production';
+      const message = isProduction
+        ? `Missing required environment variable: ${name}. Please check your Vercel project settings and ensure ${name} is set in Environment Variables.`
+        : `Missing required environment variable: ${name}. Please check your .env.local file.`;
+      console.error(message);
       return '';
     }
   }

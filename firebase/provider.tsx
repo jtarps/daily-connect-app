@@ -130,7 +130,11 @@ export const useFirebase = (): FirebaseServicesAndUser => {
   }
 
   if (!context.areServicesAvailable || !context.firebaseApp || !context.firestore || !context.auth) {
-    throw new Error('Firebase core services not available. Check FirebaseProvider props.');
+    const isProduction = process.env.NODE_ENV === 'production';
+    const errorMessage = isProduction
+      ? 'Firebase core services not available. This usually means Firebase environment variables are missing in Vercel. Please check your Vercel project settings (Settings → Environment Variables) and ensure all NEXT_PUBLIC_FIREBASE_* variables are set: NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID, NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID.'
+      : 'Firebase core services not available. Check FirebaseProvider props and ensure all NEXT_PUBLIC_FIREBASE_* environment variables are set in your .env.local file.';
+    throw new Error(errorMessage);
   }
 
   return {
