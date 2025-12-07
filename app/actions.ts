@@ -262,3 +262,124 @@ export async function sendRemindersToInactiveMembers(input: SendRemindersToInact
         };
     }
 }
+
+const NotifyCircleOnCheckInInputSchema = z.object({
+  userId: z.string().describe('The user ID of the person who checked in.'),
+  userName: z.string().describe('The name of the person who checked in.'),
+});
+type NotifyCircleOnCheckInInput = z.infer<typeof NotifyCircleOnCheckInInputSchema>;
+
+export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
+    const db = admin.firestore();
+    const messaging = admin.messaging();
+
+    const validation = NotifyCircleOnCheckInInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.', notified: 0 };
+    }
+
+    const { userId, userName } = validation.data;
+
+    try {
+        // 1. Get user's preference
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return { success: false, message: 'User not found.', notified: 0 };
+        }
+
+        const userData = userDoc.data();
+        const notifyCircle = userData?.notifyCircleOnCheckIn !== false; // Default to true
+
+        if (!notifyCircle) {
+            return { success: true, message: 'Notifications disabled by user.', notified: 0 };
+        }
+
+        // 2. Find all circles this user belongs to
+        const circlesSnapshot = await db
+            .collection('circles')
+            .where('memberIds', 'array-contains', userId)
+            .get();
+
+        if (circlesSnapshot.empty) {
+            return { success: true, message: 'User is not in any circles.', notified: 0 };
+        }
+
+        // 3. For each circle, notify all other members
+        let totalNotified = 0;
+        const allTokens: string[] = [];
+        const memberIdsSet = new Set<string>();
+
+        for (const circleDoc of circlesSnapshot.docs) {
+            const circleData = circleDoc.data();
+            const memberIds = circleData.memberIds || [];
+            
+            // Get all other members (excluding the user who checked in)
+            const otherMembers = memberIds.filter((id: string) => id !== userId);
+            
+            for (const memberId of otherMembers) {
+                if (memberIdsSet.has(memberId)) continue; // Avoid duplicates
+                memberIdsSet.add(memberId);
+
+                // Get FCM tokens for this member
+                const tokensSnapshot = await db
+                    .collection('users')
+                    .doc(memberId)
+                    .collection('fcmTokens')
+                    .get();
+
+                tokensSnapshot.docs.forEach(tokenDoc => {
+                    allTokens.push(tokenDoc.id);
+                });
+            }
+        }
+
+        if (allTokens.length === 0) {
+            return { success: true, message: 'No members with notifications enabled.', notified: 0 };
+        }
+
+        // 4. Send notification to all tokens
+        const message = {
+            notification: {
+                title: `${userName} checked in! ✅`,
+                body: `${userName} just checked in. They're doing okay!`,
+            },
+            webpush: {
+                fcmOptions: {
+                    link: '/circle',
+                },
+                notification: {
+                    icon: '/logo-192.png',
+                }
+            },
+            tokens: allTokens,
+        };
+
+        const response = await messaging.sendEachForMulticast(message);
+        
+        if (response.failureCount > 0) {
+            const failedTokens: string[] = [];
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    failedTokens.push(allTokens[idx]);
+                }
+            });
+            console.log('List of tokens that caused failures: ' + failedTokens);
+        }
+
+        totalNotified = response.successCount;
+
+        return {
+            success: true,
+            message: `Notified ${totalNotified} circle member(s).`,
+            notified: totalNotified,
+        };
+
+    } catch (error) {
+        console.error('Error notifying circle on check-in:', error);
+        return {
+            success: false,
+            message: 'There was an error notifying your circle.',
+            notified: 0,
+        };
+    }
+}

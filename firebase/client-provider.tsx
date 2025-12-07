@@ -16,8 +16,20 @@ function initializeFirebase() {
   if (!getApps().length) {
     let firebaseApp: FirebaseApp;
     try {
+      // Try automatic initialization first (for Firebase Hosting)
       firebaseApp = initializeApp();
     } catch (e) {
+      // Fall back to explicit config
+      // Validate config before using it
+      if (!firebaseConfig.apiKey || firebaseConfig.apiKey.trim() === '') {
+        const error = new Error(
+          'Firebase API key is missing. Please check your .env.local file and ensure NEXT_PUBLIC_FIREBASE_API_KEY is set. ' +
+          'Restart your dev server after adding environment variables.'
+        );
+        console.error(error);
+        throw error;
+      }
+      
       if (process.env.NODE_ENV === "production") {
         console.warn('Automatic initialization failed. Falling back to firebase config object.', e);
       }

@@ -17,10 +17,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from 'firebase/auth';
+import { CheckInIntervalSettings } from './check-in-interval-settings';
 
 const navItems = [
     { href: "/check-in", label: "Check-in", icon: Home },
-    { href: "/circle", label: "Circle", icon: Users },
+    { href: "/circle", label: "My Circles", icon: Users },
 ];
 
 const Header = () => {
@@ -76,6 +77,7 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-4">
+          <CheckInIntervalSettings />
           <Button variant="ghost" size="icon" aria-label="Notifications">
             <Bell className="h-5 w-5" />
           </Button>
