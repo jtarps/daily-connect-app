@@ -10,7 +10,7 @@ export function useUserCircles(userId: string | undefined) {
     const firestore = useFirestore();
 
     const circlesQuery = useMemoFirebase(() => {
-        if (!userId) return null;
+        if (!userId || !firestore) return null;
 
         return query(
             collection(firestore, 'circles'),
