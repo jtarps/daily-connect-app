@@ -1,0 +1,104 @@
+
+"use client";
+
+import { Users, Bell, Home, LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import { useUser, useAuth } from '@/firebase/provider';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { signOut } from 'firebase/auth';
+
+const navItems = [
+    { href: "/check-in", label: "Check-in", icon: Home },
+    { href: "/circle", label: "Circle", icon: Users },
+];
+
+const Header = () => {
+  const { user } = useUser();
+  const auth = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const handleSignOut = async () => {
+    if (!auth) return;
+    await signOut(auth);
+    router.push('/');
+  }
+  
+  const getInitials = () => {
+    if (user?.isAnonymous) return 'AN';
+    if (user?.email) {
+        return user.email.substring(0, 2).toUpperCase();
+    }
+    return 'U';
+  }
+
+  return (
+    <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary p-2 rounded-lg shadow-md">
+            <Users className="text-primary-foreground" />
+          </div>
+          <h1 className="text-xl font-bold text-foreground font-headline">
+            Daily Connect
+          </h1>
+        </div>
+        
+        {/* Desktop Nav */}
+        <nav className="hidden md:flex items-center gap-4">
+            {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                    <Link
+                        key={item.href}
+                        href={item.href}
+                        className={cn(
+                            "flex items-center gap-2 text-sm font-medium transition-colors p-2 rounded-md",
+                            isActive ? "bg-accent/20 text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+                        )}
+                    >
+                        <item.icon className="h-5 w-5" />
+                        <span>{item.label}</span>
+                    </Link>
+                );
+            })}
+        </nav>
+
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Button variant="ghost" size="icon" aria-label="Notifications">
+            <Bell className="h-5 w-5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Avatar className="cursor-pointer">
+                    {/* The AvatarImage is removed as we don't have user images yet */}
+                    <AvatarFallback>{getInitials()}</AvatarFallback>
+                </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuLabel>{user?.email || 'My Account'}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default Header;

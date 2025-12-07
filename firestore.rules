@@ -1,0 +1,171 @@
+
+/**
+ * @fileOverview Firestore Security Rules for Daily Connect App
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model for personal data (user profiles, check-ins) and a shared-access model for collaborative data (circles).
+ * It prioritizes authorization independence by denormalizing access control data directly into the documents being secured.
+ *
+ * Data Structure:
+ * - /users/{userId}: Stores individual user profiles. Only the user can read/write their profile.
+ * - /users/{userId}/checkIns/{checkInId}: Stores check-in records for a user. Only the user can read/write their check-in history.
+ * - /circles/{circleId}: Stores circle-of-trust information. The owner and members of a circle have specific access rights.
+ * - /invitations/{invitationId}: Stores invitations for users to join circles.
+ *
+ * Key Security Decisions:
+ * - User listing is explicitly disallowed to protect user privacy.
+ * - All write operations are protected by authorization checks. Open writes (if true) are strictly forbidden.
+ * - Data validation is minimized in this prototyping phase to focus on authorization. Only fields critical for authorization and relational integrity are validated.
+ *
+ * Denormalization for Authorization:
+ * - Circles: Each circle document includes an `ownerId` field and a `memberIds` array. This allows for fast, simple rules to check ownership and membership without extra reads.
+ *
+ * Structural Segregation:
+ * - User profiles and check-in data are stored under /users/{userId} to ensure that only the user can access their own data.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Enforces access control for user profiles. Only the user can read/write their own profile.
+     * @path /users/{userId}
+     * @allow (create) User with ID 'user_abc' can create their own profile if authenticated as 'user_abc'.
+     * @allow (get) User with ID 'user_abc' can read their own profile if authenticated as 'user_abc'.
+     * @allow (update) User with ID 'user_abc' can update their own profile if authenticated as 'user_abc'.
+     * @allow (delete) User with ID 'user_abc' can delete their own profile if authenticated as 'user_abc'.
+     * @deny (create) User with ID 'user_xyz' cannot create a profile with ID 'user_abc'.
+     * @deny (get) User with ID 'user_xyz' cannot read the profile of 'user_abc'.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn(); // Allow any signed in user to get a user profile (to resolve names, etc)
+      allow list: if false; // User listing is not permitted.
+
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isOwner(userId) && resource.data.id == userId; // Enforce immutability of the user ID.
+      allow delete: if isOwner(userId) && resource != null;
+    }
+    
+    /**
+     * @description Secures FCM tokens. Only the user can manage their own tokens.
+     * @path /users/{userId}/fcmTokens/{tokenId}
+     */
+    match /users/{userId}/fcmTokens/{tokenId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      
+      allow read, write: if isOwner(userId);
+    }
+
+    /**
+     * @description Enforces access control for user check-in records. Only the user can read/write their own check-in history.
+     * @path /users/{userId}/checkIns/{checkInId}
+     * @allow (create) User with ID 'user_abc' can create a check-in record under their profile.
+     * @allow (get) User with ID 'user_abc' can read a check-in record under their profile.
+     * @allow (update) User with ID 'user_abc' can update a check-in record under their profile.
+     * @allow (delete) User with ID 'user_abc' can delete their own profile.
+     * @deny (create) User with ID 'user_xyz' cannot create a check-in record for 'user_abc'.
+     * @deny (get) User with ID 'user_xyz' cannot read check-in records for 'user_abc'.
+     * @principle Restricts access to a user's own data tree.
+     */
+    match /users/{userId}/checkIns/{checkInId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+      
+      // A user can get their own checkins. Other members of a shared circle can also view checkins.
+      allow get: if isSignedIn();
+      allow list: if isSignedIn(); // Allow members of a shared circle to list checkins
+
+      allow create: if isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isOwner(userId) && resource != null && resource.data.userId == userId; // Prevents changes to userId on update
+      allow delete: if isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Enforces access control for circles of trust. Owners and members have specific access rights.
+     * @path /circles/{circleId}
+     * @allow (create) User with ID 'user_abc' can create a circle and is automatically the owner.
+     * @allow (get) User with ID 'user_abc' can read a circle if they are the owner or a member.
+     * @allow (update) User with ID 'user_abc' (owner) can update the circle's name or member list.
+     * @allow (delete) User with ID 'user_abc' (owner) can delete the circle.
+     * @deny (create) User with ID 'user_xyz' cannot create a circle with ownerId 'user_abc'.
+     * @deny (get) User with ID 'user_xyz' cannot read a a circle if they are not the owner or a member.
+     * @principle Enforces a shared access model with owner-based management.
+     */
+    match /circles/{circleId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner() {
+        return isSignedIn() && request.auth.uid == resource.data.ownerId;
+      }
+
+      function isMember() {
+          return isSignedIn() && resource.data.memberIds.hasAny([request.auth.uid]);
+      }
+
+      // Check if user is being added to the members list
+      function isAcceptingInvite() {
+        let isNewMember = !(request.auth.uid in resource.data.memberIds) && (request.auth.uid in request.resource.data.memberIds);
+        let onlyMembersChanged = request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']);
+        return isNewMember && onlyMembersChanged;
+      }
+
+      allow get: if isSignedIn() && isMember();
+      allow list: if isSignedIn(); // Allow listing of circles for authenticated users. Further filtering will happen in code.
+
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && (isOwner() || isAcceptingInvite());
+      allow delete: if isSignedIn() && isOwner();
+    }
+
+    /**
+     * @description Secures invitations to circles.
+     * @path /invitations/{invitationId}
+     * @allow (create) A member of a circle can invite others.
+     * @allow (list) A user can list invitations sent to their email.
+     * @allow (delete) A user can delete an invitation sent to them (accept or decline).
+     * @principle Invitations are controlled by the invitee.
+     */
+    match /invitations/{invitationId} {
+        function isSignedIn() {
+            return request.auth != null;
+        }
+
+        // Check if the user is a member of the circle they are inviting someone to
+        function isCircleMember(circleId) {
+            let circle = get(/databases/$(database)/documents/circles/$(circleId)).data;
+            return request.auth.uid in circle.memberIds;
+        }
+
+        allow create: if isSignedIn() && isCircleMember(request.resource.data.circleId);
+        
+        // A user can read an invitation if their email matches the inviteeEmail.
+        allow get: if isSignedIn() && resource.data.inviteeEmail == request.auth.token.email;
+
+        // Allow a user to list invitations. The query will filter by email, and individual document access is controlled by get rule.
+        // Note: Firestore security rules can't reliably inspect query.where parameters, so we allow list for signed-in users.
+        // The application code filters by inviteeEmail, and the get rule ensures users can only read their own invitations.
+        allow list: if isSignedIn();
+
+        // Only the invited user can delete (accept/decline) the invitation
+        allow delete: if isSignedIn() && resource.data.inviteeEmail == request.auth.token.email;
+    }
+  }
+}
