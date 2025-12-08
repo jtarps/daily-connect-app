@@ -18,23 +18,21 @@
 **Important:** Recipients still need to create an account to join circles, even when using shareable links.
 
 ### Current Authentication Methods
-- **Email/Password** - Required for all users
-- Users must sign up with an email address to create an account
+- **Email/Password** - Traditional signup with email and password
+- **Phone Number** - Sign up with phone number (SMS verification)
+- Users can choose either method when signing up
 - Once signed up, they remain logged in via Firebase Auth
 
-### Why Email is Still Required
-- Firebase Authentication requires an email for account creation
-- Email is used for:
-  - Account recovery
-  - Email verification
-  - Password resets
-  - Staying logged in across devices
+### Phone Authentication Pricing
+- **Free tier:** 10,000 verifications per month
+- **After free tier:** $0.06 per verification (SMS costs included)
+- Very affordable for most apps!
 
-### Future: Phone Number Authentication
-To support users without email, you could add:
-- **Phone number authentication** (Firebase supports this)
-- Users sign up with phone number instead of email
-- Still works with shareable links
+### Why Phone Authentication is Great for Developing Countries
+- Many people use phone numbers instead of email
+- WhatsApp/Facebook users often sign up with phone numbers
+- SMS verification is reliable and widely available
+- Shareable links work perfectly with phone authentication
 
 ## Email Notifications Setup
 

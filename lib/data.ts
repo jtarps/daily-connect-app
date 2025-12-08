@@ -13,7 +13,8 @@ export interface User {
     id: string;
     firstName: string;
     lastName: string;
-    email: string;
+    email?: string; // Optional - can use phone instead
+    phoneNumber?: string; // Optional - for phone authentication
     streak?: number;
     checkInInterval?: CheckInInterval; // Default: 'daily'
     customCheckInHours?: number; // For custom interval, hours between check-ins (min 1, max 168)
@@ -33,6 +34,7 @@ export interface Invitation {
     circleName: string;
     inviterId: string;
     inviteeEmail?: string; // Optional - for email-based invitations
+    inviteePhone?: string; // Optional - for phone-based invitations
     invitationToken?: string; // For shareable link-based invitations
     status: 'pending';
     createdAt: Timestamp;
