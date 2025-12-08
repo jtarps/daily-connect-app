@@ -21,7 +21,7 @@ import { useFirestore, useUser } from '@/firebase/provider';
 import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { sendInvitationEmail, sendInvitationSMS } from '@/app/actions';
+import { sendInvitationEmail, sendInvitationSMS, sendInvitationWhatsApp } from '@/app/actions';
 import type { User } from '@/lib/data';
 import {
   AlertDialog,
@@ -272,6 +272,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
 
     // Send phone invitations
     let smsSent = 0;
+    let whatsappSent = 0;
     for (const phone of phonesToInviteFiltered) {
         try {
             // Format phone number (ensure it starts with +)
@@ -290,19 +291,31 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
             await addDoc(invitationsRef, invitationData);
             invitesSent++;
 
-            // Send SMS notification
             const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
             const signupLink = `${baseUrl}/signup`;
-            
-            const smsResult = await sendInvitationSMS({
+
+            // Try WhatsApp first (much cheaper - $0.0014 vs $0.06 for SMS)
+            const whatsappResult = await sendInvitationWhatsApp({
                 inviteePhone: formattedPhone,
                 circleName: currentCircleName,
                 inviterName: inviterName,
                 invitationLink: signupLink,
             });
 
-            if (smsResult.success) {
-                smsSent++;
+            if (whatsappResult.success) {
+                whatsappSent++;
+            } else {
+                // Fallback to SMS if WhatsApp fails
+                const smsResult = await sendInvitationSMS({
+                    inviteePhone: formattedPhone,
+                    circleName: currentCircleName,
+                    inviterName: inviterName,
+                    invitationLink: signupLink,
+                });
+
+                if (smsResult.success) {
+                    smsSent++;
+                }
             }
         } catch (error) {
             console.error(`Error sending invitation to ${phone}:`, error);
@@ -317,9 +330,10 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
 
     const notificationSummary = [];
     if (emailsSent > 0) notificationSummary.push(`${emailsSent} email(s)`);
+    if (whatsappSent > 0) notificationSummary.push(`${whatsappSent} WhatsApp(s)`);
     if (smsSent > 0) notificationSummary.push(`${smsSent} SMS(s)`);
     const notificationText = notificationSummary.length > 0 
-        ? ` and sent ${notificationSummary.join(' and ')}` 
+        ? ` and sent ${notificationSummary.join(', ')}` 
         : '';
 
     toast({

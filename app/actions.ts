@@ -548,3 +548,84 @@ export async function sendInvitationSMS(input: SendInvitationSMSInput) {
         };
     }
 }
+
+// WhatsApp notification schema
+const SendInvitationWhatsAppInputSchema = z.object({
+    inviteePhone: z.string(),
+    circleName: z.string(),
+    inviterName: z.string(),
+    invitationLink: z.string().optional(),
+});
+
+type SendInvitationWhatsAppInput = z.infer<typeof SendInvitationWhatsAppInputSchema>;
+
+/**
+ * Sends a WhatsApp notification for a circle invitation.
+ * Uses WhatsApp Business API (can be configured with Twilio, Meta, etc.)
+ * Much cheaper than SMS - ~$0.0014 per message vs $0.06 for SMS
+ */
+export async function sendInvitationWhatsApp(input: SendInvitationWhatsAppInput) {
+    const db = admin.firestore();
+    
+    const validation = SendInvitationWhatsAppInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.' };
+    }
+
+    const { inviteePhone, circleName, inviterName, invitationLink } = validation.data;
+
+    try {
+        // Format phone number (ensure it starts with + and remove any spaces)
+        const formattedPhone = inviteePhone.startsWith('+') 
+            ? inviteePhone.replace(/\s/g, '') 
+            : `+${inviteePhone.replace(/\s/g, '')}`;
+        
+        // Check if WhatsApp service is configured
+        const whatsappServiceUrl = process.env.WHATSAPP_SERVICE_URL;
+        const whatsappApiKey = process.env.WHATSAPP_API_KEY;
+        const whatsappPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+        
+        if (whatsappServiceUrl && whatsappApiKey && whatsappPhoneNumberId) {
+            // If WhatsApp service is configured, send the message
+            // This uses the WhatsApp Business API format (Meta/Twilio)
+            const messageText = `${inviterName} invited you to join "${circleName}" on Daily Connect. ${invitationLink ? `Join here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup`}`;
+            
+            const whatsappResponse = await fetch(whatsappServiceUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${whatsappApiKey}`,
+                },
+                body: JSON.stringify({
+                    messaging_product: 'whatsapp',
+                    to: formattedPhone,
+                    type: 'text',
+                    text: {
+                        body: messageText
+                    }
+                }),
+            });
+
+            if (!whatsappResponse.ok) {
+                console.error('WhatsApp service error:', await whatsappResponse.text());
+                return { success: false, message: 'Failed to send WhatsApp notification.' };
+            }
+        } else {
+            // Log WhatsApp message for development (service not configured)
+            console.log('💬 Invitation WhatsApp (WhatsApp service not configured):', {
+                to: formattedPhone,
+                message: `${inviterName} invited you to join "${circleName}"`,
+                invitationLink: invitationLink || 'Sign up to see invitation',
+                note: 'WhatsApp is ~43x cheaper than SMS ($0.0014 vs $0.06 per message)',
+            });
+        }
+
+        return { success: true, message: 'Invitation WhatsApp sent.' };
+    } catch (error) {
+        console.error('Error sending invitation WhatsApp:', error);
+        return {
+            success: false,
+            message: 'There was an error sending the invitation WhatsApp.',
+        };
+    }
+}

@@ -65,9 +65,41 @@ Update `sendInvitationEmail` in `app/actions.ts` to use your email service API.
 
 If email service is not configured, invitations are still created in Firestore, but emails are only logged to the console.
 
-## SMS Notifications Setup
+## WhatsApp Notifications Setup (Recommended - Much Cheaper!)
 
-### Option 1: Twilio (Recommended)
+**Cost Comparison:**
+- **WhatsApp Business API:** ~$0.0014 per message (utility/authentication)
+- **SMS:** $0.06 per message (after Firebase free tier)
+- **WhatsApp is ~43x cheaper!** 🎉
+
+### Option 1: Twilio WhatsApp API (Recommended)
+
+1. Sign up at [twilio.com](https://twilio.com)
+2. Enable WhatsApp Sandbox or get approved for WhatsApp Business API
+3. Get your Account SID, Auth Token, and WhatsApp Phone Number ID
+4. Add to Vercel environment variables:
+   - `WHATSAPP_SERVICE_URL=https://api.twilio.com/2010-04-01/Accounts/{AccountSID}/Messages.json`
+   - `WHATSAPP_API_KEY=your_auth_token_here`
+   - `WHATSAPP_PHONE_NUMBER_ID=your_whatsapp_phone_number_id`
+
+### Option 2: Meta WhatsApp Business API
+
+1. Set up WhatsApp Business Account at [business.facebook.com](https://business.facebook.com)
+2. Get your Access Token and Phone Number ID
+3. Add to Vercel environment variables:
+   - `WHATSAPP_SERVICE_URL=https://graph.facebook.com/v18.0/{PhoneNumberID}/messages`
+   - `WHATSAPP_API_KEY=your_access_token_here`
+   - `WHATSAPP_PHONE_NUMBER_ID=your_phone_number_id`
+
+### Option 3: Custom WhatsApp Service
+
+Update `sendInvitationWhatsApp` in `app/actions.ts` to use your WhatsApp service API.
+
+## SMS Notifications Setup (Fallback)
+
+The system will automatically fall back to SMS if WhatsApp is not configured or fails.
+
+### Option 1: Twilio SMS
 
 1. Sign up at [twilio.com](https://twilio.com)
 2. Get your Account SID and Auth Token
@@ -82,7 +114,7 @@ Update `sendInvitationSMS` in `app/actions.ts` to use your SMS service API.
 
 ### Development Mode
 
-If SMS service is not configured, invitations are still created in Firestore, but SMS messages are only logged to the console.
+If neither WhatsApp nor SMS service is configured, invitations are still created in Firestore, but notifications are only logged to the console.
 
 ## How It Works
 
