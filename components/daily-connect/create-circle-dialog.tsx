@@ -18,9 +18,11 @@ import { X, Plus, UserPlus, Trash2, Share2, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Circle } from '@/lib/data';
 import { useFirestore, useUser } from '@/firebase/provider';
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { sendInvitationEmail } from '@/app/actions';
+import type { User } from '@/lib/data';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -173,7 +175,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
   };
 
   const sendInvitations = async (circleId: string, currentCircleName: string) => {
-    if (!user) return;
+    if (!user || !firestore) return;
     const inviterId = user.uid;
     const emailsToInvite = membersToInvite.map(m => m.trim()).filter(m => m.length > 0 && m.includes('@'));
 
@@ -182,43 +184,67 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
         return;
     };
     
-    if (!firestore) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Firebase is not available. Please refresh the page.',
-      });
-      return;
-    }
     const invitationsRef = collection(firestore, 'invitations');
     let invitesSent = 0;
+    let emailsSent = 0;
+
+    // Get inviter's name for email
+    let inviterName = user.email || 'Someone';
+    try {
+      const userDoc = await getDoc(doc(firestore, 'users', user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as User;
+        inviterName = userData.firstName && userData.lastName 
+          ? `${userData.firstName} ${userData.lastName}`
+          : inviterName;
+      }
+    } catch (error) {
+      console.error('Error fetching inviter name:', error);
+    }
 
     for (const email of emailsToInvite) {
-        const invitationData = {
-            circleId: circleId,
-            circleName: currentCircleName,
-            inviterId: inviterId,
-            inviteeEmail: email,
-            status: 'pending',
-            createdAt: serverTimestamp(),
-        };
+        try {
+            const invitationData = {
+                circleId: circleId,
+                circleName: currentCircleName,
+                inviterId: inviterId,
+                inviteeEmail: email,
+                status: 'pending' as const,
+                createdAt: serverTimestamp(),
+            };
 
-        // We don't await this, just send them off
-        addDoc(invitationsRef, invitationData).then(() => {
+            // Create invitation in Firestore
+            await addDoc(invitationsRef, invitationData);
             invitesSent++;
-        }).catch(async (serverError) => {
+
+            // Send email notification
+            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+            const signupLink = `${baseUrl}/signup`;
+            
+            const emailResult = await sendInvitationEmail({
+                inviteeEmail: email,
+                circleName: currentCircleName,
+                inviterName: inviterName,
+                invitationLink: signupLink,
+            });
+
+            if (emailResult.success) {
+                emailsSent++;
+            }
+        } catch (error) {
+            console.error(`Error sending invitation to ${email}:`, error);
             const permissionError = new FirestorePermissionError({
                 path: 'invitations',
                 operation: 'create',
-                requestResourceData: invitationData,
+                requestResourceData: { circleId, inviteeEmail: email },
             });
             errorEmitter.emit('permission-error', permissionError);
-        });
+        }
     }
 
     toast({
         title: "Invitations Sent",
-        description: `We've sent invites to ${emailsToInvite.length} potential new member(s).`,
+        description: `Created ${invitesSent} invitation(s)${emailsSent > 0 ? ` and sent ${emailsSent} email notification(s)` : ''}.`,
     });
   };
 

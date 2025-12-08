@@ -383,3 +383,99 @@ export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
         };
     }
 }
+
+// Email notification schema
+const SendInvitationEmailInputSchema = z.object({
+    inviteeEmail: z.string().email(),
+    circleName: z.string(),
+    inviterName: z.string(),
+    invitationLink: z.string().optional(),
+});
+
+type SendInvitationEmailInput = z.infer<typeof SendInvitationEmailInputSchema>;
+
+/**
+ * Sends an email notification for a circle invitation.
+ * Uses a simple email service (can be configured with Resend, SendGrid, etc.)
+ */
+export async function sendInvitationEmail(input: SendInvitationEmailInput) {
+    const db = admin.firestore();
+    
+    const validation = SendInvitationEmailInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.' };
+    }
+
+    const { inviteeEmail, circleName, inviterName, invitationLink } = validation.data;
+
+    try {
+        // For now, we'll use a simple approach that logs the email
+        // In production, you can integrate with Resend, SendGrid, or another email service
+        
+        // Check if email service is configured
+        const emailServiceUrl = process.env.EMAIL_SERVICE_URL;
+        const emailApiKey = process.env.EMAIL_API_KEY;
+        
+        if (emailServiceUrl && emailApiKey) {
+            // If email service is configured, send the email
+            const emailResponse = await fetch(emailServiceUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${emailApiKey}`,
+                },
+                body: JSON.stringify({
+                    to: inviteeEmail,
+                    subject: `${inviterName} invited you to join "${circleName}" on Daily Connect`,
+                    html: `
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                            <h2>You've been invited to join "${circleName}"!</h2>
+                            <p>Hi there,</p>
+                            <p><strong>${inviterName}</strong> has invited you to join their circle "<strong>${circleName}</strong>" on Daily Connect.</p>
+                            <p>Daily Connect is a simple way to let your loved ones know you're okay, every day.</p>
+                            ${invitationLink ? `
+                                <p style="margin: 30px 0;">
+                                    <a href="${invitationLink}" style="background-color: #64B5F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                                        Accept Invitation
+                                    </a>
+                                </p>
+                            ` : `
+                                <p style="margin: 30px 0;">
+                                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup" style="background-color: #64B5F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                                        Sign Up to Join
+                                    </a>
+                                </p>
+                            `}
+                            <p>Once you sign up, you'll automatically see the invitation and can join the circle.</p>
+                            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+                            <p style="color: #666; font-size: 12px;">
+                                If you didn't expect this invitation, you can safely ignore this email.
+                            </p>
+                        </div>
+                    `,
+                    text: `${inviterName} invited you to join "${circleName}" on Daily Connect. ${invitationLink ? `Accept here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup`}`,
+                }),
+            });
+
+            if (!emailResponse.ok) {
+                console.error('Email service error:', await emailResponse.text());
+                return { success: false, message: 'Failed to send email notification.' };
+            }
+        } else {
+            // Log email for development (email service not configured)
+            console.log('📧 Invitation Email (email service not configured):', {
+                to: inviteeEmail,
+                subject: `${inviterName} invited you to join "${circleName}"`,
+                invitationLink: invitationLink || 'Sign up to see invitation',
+            });
+        }
+
+        return { success: true, message: 'Invitation email sent.' };
+    } catch (error) {
+        console.error('Error sending invitation email:', error);
+        return {
+            success: false,
+            message: 'There was an error sending the invitation email.',
+        };
+    }
+}

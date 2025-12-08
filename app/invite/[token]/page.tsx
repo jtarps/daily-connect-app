@@ -165,14 +165,17 @@ export default function InviteAcceptPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground text-center">
-              To accept this invitation, please sign up or log in first.
+              To accept this invitation, please create an account first. You&apos;ll need an email address to sign up.
+            </p>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Note: Even though you received this link via WhatsApp/SMS, you&apos;ll still need an email address to create your account and remain logged in.
             </p>
             <div className="flex flex-col gap-2">
               <Button asChild>
-                <Link href={`/signup?invite=${token}`}>Sign Up</Link>
+                <Link href={`/signup?invite=${token}`}>Sign Up with Email</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href={`/login?invite=${token}`}>Log In</Link>
+                <Link href={`/login?invite=${token}`}>Already have an account? Log In</Link>
               </Button>
             </div>
           </CardContent>
