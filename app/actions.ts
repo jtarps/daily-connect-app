@@ -479,3 +479,72 @@ export async function sendInvitationEmail(input: SendInvitationEmailInput) {
         };
     }
 }
+
+// SMS notification schema
+const SendInvitationSMSInputSchema = z.object({
+    inviteePhone: z.string(),
+    circleName: z.string(),
+    inviterName: z.string(),
+    invitationLink: z.string().optional(),
+});
+
+type SendInvitationSMSInput = z.infer<typeof SendInvitationSMSInputSchema>;
+
+/**
+ * Sends an SMS notification for a circle invitation.
+ * Uses a simple SMS service (can be configured with Twilio, etc.)
+ */
+export async function sendInvitationSMS(input: SendInvitationSMSInput) {
+    const db = admin.firestore();
+    
+    const validation = SendInvitationSMSInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.' };
+    }
+
+    const { inviteePhone, circleName, inviterName, invitationLink } = validation.data;
+
+    try {
+        // Format phone number (ensure it starts with +)
+        const formattedPhone = inviteePhone.startsWith('+') ? inviteePhone : `+${inviteePhone}`;
+        
+        // Check if SMS service is configured
+        const smsServiceUrl = process.env.SMS_SERVICE_URL;
+        const smsApiKey = process.env.SMS_API_KEY;
+        
+        if (smsServiceUrl && smsApiKey) {
+            // If SMS service is configured, send the SMS
+            const smsResponse = await fetch(smsServiceUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${smsApiKey}`,
+                },
+                body: JSON.stringify({
+                    to: formattedPhone,
+                    message: `${inviterName} invited you to join "${circleName}" on Daily Connect. ${invitationLink ? `Join here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup`}`,
+                }),
+            });
+
+            if (!smsResponse.ok) {
+                console.error('SMS service error:', await smsResponse.text());
+                return { success: false, message: 'Failed to send SMS notification.' };
+            }
+        } else {
+            // Log SMS for development (SMS service not configured)
+            console.log('📱 Invitation SMS (SMS service not configured):', {
+                to: formattedPhone,
+                message: `${inviterName} invited you to join "${circleName}"`,
+                invitationLink: invitationLink || 'Sign up to see invitation',
+            });
+        }
+
+        return { success: true, message: 'Invitation SMS sent.' };
+    } catch (error) {
+        console.error('Error sending invitation SMS:', error);
+        return {
+            success: false,
+            message: 'There was an error sending the invitation SMS.',
+        };
+    }
+}

@@ -1,6 +1,7 @@
 
 'use client';
 
+import { useMemo } from 'react';
 import { useFirestore, useUser, useMemoFirebase } from "@/firebase/provider";
 import { useCollection } from "@/firebase/firestore/use-collection";
 import { collection, query, where, doc, updateDoc, arrayUnion, deleteDoc } from "firebase/firestore";
@@ -24,19 +25,24 @@ const InvitationList = () => {
         );
     }
     
-    if (!user || !user.email) {
+    if (!user) {
         return null;
     }
     
-    return <PendingInvitations email={user.email} />;
+    // Get user's email and phone number for querying invitations
+    const userEmail = user.email || null;
+    const userPhone = user.phoneNumber || null;
+    
+    return <PendingInvitations email={userEmail} phoneNumber={userPhone} />;
 };
 
-const PendingInvitations = ({ email }: { email: string }) => {
+const PendingInvitations = ({ email, phoneNumber }: { email: string | null; phoneNumber: string | null }) => {
     const { user } = useUser();
     const firestore = useFirestore();
     const { toast } = useToast();
 
-    const invitationsQuery = useMemoFirebase(() => {
+    // Query invitations by email if available
+    const emailInvitationsQuery = useMemoFirebase(() => {
         if (!email || !firestore) return null;
         return query(
             collection(firestore, 'invitations'),
@@ -44,7 +50,35 @@ const PendingInvitations = ({ email }: { email: string }) => {
         );
     }, [firestore, email]);
 
-    const { data: myInvitations, isLoading, error } = useCollection<Invitation>(invitationsQuery);
+    // Query invitations by phone if available
+    const phoneInvitationsQuery = useMemoFirebase(() => {
+        if (!phoneNumber || !firestore) return null;
+        // Format phone number to match stored format (with +)
+        const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
+        return query(
+            collection(firestore, 'invitations'),
+            where('inviteePhone', '==', formattedPhone)
+        );
+    }, [firestore, phoneNumber]);
+
+    const { data: emailInvitations, isLoading: isLoadingEmail } = useCollection<Invitation>(emailInvitationsQuery);
+    const { data: phoneInvitations, isLoading: isLoadingPhone } = useCollection<Invitation>(phoneInvitationsQuery);
+
+    // Combine both invitation lists and remove duplicates
+    const myInvitations = useMemo(() => {
+        const allInvitations = [
+            ...(emailInvitations || []),
+            ...(phoneInvitations || [])
+        ];
+        // Remove duplicates by invitation ID
+        const uniqueInvitations = Array.from(
+            new Map(allInvitations.map(inv => [inv.id, inv])).values()
+        );
+        return uniqueInvitations;
+    }, [emailInvitations, phoneInvitations]);
+
+    const isLoading = isLoadingEmail || isLoadingPhone;
+
     
     const handleAccept = async (invitation: Invitation) => {
         if (!user || !firestore) return;
@@ -104,7 +138,7 @@ const PendingInvitations = ({ email }: { email: string }) => {
         );
     }
     
-    if (!myInvitations || myInvitations.length === 0) {
+    if (!isLoading && (!myInvitations || myInvitations.length === 0)) {
         return null; // Don't render anything if there are no invitations
     }
     

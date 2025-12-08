@@ -158,19 +158,32 @@ service cloud.firestore {
         
         // A user can read an invitation if:
         // 1. Their email matches the inviteeEmail (email-based invitation), OR
-        // 2. They have the invitationToken (link-based invitation - checked in app code)
+        // 2. Their phone number matches the inviteePhone (phone-based invitation), OR
+        // 3. They have the invitationToken (link-based invitation - checked in app code)
+        // Note: phone_number in token may be in E.164 format, we check both exact match and normalized format
         allow get: if isSignedIn() && (
             resource.data.inviteeEmail == request.auth.token.email ||
+            (resource.data.inviteePhone != null && (
+                resource.data.inviteePhone == request.auth.token.phone_number ||
+                resource.data.inviteePhone == ('+' + request.auth.token.phone_number)
+            )) ||
             resource.data.invitationToken != null
         );
 
-        // Allow a user to list invitations. The query will filter by email or token, and individual document access is controlled by get rule.
+        // Allow a user to list invitations. The query will filter by email, phone, or token, and individual document access is controlled by get rule.
         // Note: Firestore security rules can't reliably inspect query.where parameters, so we allow list for signed-in users.
-        // The application code filters by inviteeEmail or invitationToken, and the get rule ensures users can only read their own invitations.
+        // The application code filters by inviteeEmail, inviteePhone, or invitationToken, and the get rule ensures users can only read their own invitations.
         allow list: if isSignedIn();
 
         // Only the invited user can delete (accept/decline) the invitation
-        allow delete: if isSignedIn() && resource.data.inviteeEmail == request.auth.token.email;
+        // Check both email and phone number (handle phone number format variations)
+        allow delete: if isSignedIn() && (
+            resource.data.inviteeEmail == request.auth.token.email ||
+            (resource.data.inviteePhone != null && (
+                resource.data.inviteePhone == request.auth.token.phone_number ||
+                resource.data.inviteePhone == ('+' + request.auth.token.phone_number)
+            ))
+        );
     }
   }
 }

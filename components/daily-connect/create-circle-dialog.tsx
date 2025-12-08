@@ -21,7 +21,7 @@ import { useFirestore, useUser } from '@/firebase/provider';
 import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { sendInvitationEmail } from '@/app/actions';
+import { sendInvitationEmail, sendInvitationSMS } from '@/app/actions';
 import type { User } from '@/lib/data';
 import {
   AlertDialog,
@@ -271,6 +271,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
     }
 
     // Send phone invitations
+    let smsSent = 0;
     for (const phone of phonesToInviteFiltered) {
         try {
             // Format phone number (ensure it starts with +)
@@ -288,6 +289,21 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
             // Create invitation in Firestore
             await addDoc(invitationsRef, invitationData);
             invitesSent++;
+
+            // Send SMS notification
+            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+            const signupLink = `${baseUrl}/signup`;
+            
+            const smsResult = await sendInvitationSMS({
+                inviteePhone: formattedPhone,
+                circleName: currentCircleName,
+                inviterName: inviterName,
+                invitationLink: signupLink,
+            });
+
+            if (smsResult.success) {
+                smsSent++;
+            }
         } catch (error) {
             console.error(`Error sending invitation to ${phone}:`, error);
             const permissionError = new FirestorePermissionError({
@@ -299,9 +315,16 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
         }
     }
 
+    const notificationSummary = [];
+    if (emailsSent > 0) notificationSummary.push(`${emailsSent} email(s)`);
+    if (smsSent > 0) notificationSummary.push(`${smsSent} SMS(s)`);
+    const notificationText = notificationSummary.length > 0 
+        ? ` and sent ${notificationSummary.join(' and ')}` 
+        : '';
+
     toast({
         title: "Invitations Sent",
-        description: `Created ${invitesSent} invitation(s)${emailsSent > 0 ? ` and sent ${emailsSent} email notification(s)` : ''}.`,
+        description: `Created ${invitesSent} invitation(s)${notificationText}.`,
     });
   };
 
