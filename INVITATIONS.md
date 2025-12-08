@@ -65,6 +65,22 @@ Update `sendInvitationEmail` in `app/actions.ts` to use your email service API.
 
 If email service is not configured, invitations are still created in Firestore, but emails are only logged to the console.
 
+## SMS Notifications Setup
+
+### Option 1: Twilio (Recommended)
+1. Sign up at [twilio.com](https://twilio.com)
+2. Get your Account SID and Auth Token
+3. Add to Vercel environment variables:
+   - `SMS_SERVICE_URL=https://api.twilio.com/2010-04-01/Accounts/{AccountSID}/Messages.json`
+   - `SMS_API_KEY=your_auth_token_here`
+   - Note: You'll need to update the `sendInvitationSMS` function in `app/actions.ts` to use Twilio's API format
+
+### Option 2: Custom SMS Service
+Update `sendInvitationSMS` in `app/actions.ts` to use your SMS service API.
+
+### Development Mode
+If SMS service is not configured, invitations are still created in Firestore, but SMS messages are only logged to the console.
+
 ## How It Works
 
 1. **Shareable Link Flow:**
