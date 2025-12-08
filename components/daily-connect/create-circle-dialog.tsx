@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X, Plus, UserPlus, Trash2 } from 'lucide-react';
+import { X, Plus, UserPlus, Trash2, Share2, Copy, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Circle } from '@/lib/data';
 import { useFirestore, useUser } from '@/firebase/provider';
@@ -46,6 +46,8 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
   const [membersToInvite, setMembersToInvite] = useState<string[]>(['']);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user } = useUser();
@@ -53,17 +55,102 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
   const isEditMode = mode === 'edit';
   const isOwner = isEditMode && circle && user?.uid === circle.ownerId;
 
+  const generateShareLink = useCallback(async (circleId: string) => {
+    if (!firestore || !user) return;
+    
+    try {
+      // Generate a unique token for this invitation
+      const token = typeof crypto !== 'undefined' && crypto.randomUUID 
+        ? crypto.randomUUID() 
+        : `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+      
+      // Create a link-based invitation
+      const invitationData = {
+        circleId: circleId,
+        circleName: circle?.name || circleName,
+        inviterId: user.uid,
+        invitationToken: token,
+        status: 'pending' as const,
+        createdAt: serverTimestamp(),
+      };
+
+      const invitationsRef = collection(firestore, 'invitations');
+      await addDoc(invitationsRef, invitationData);
+      
+      // Generate the shareable link
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      const inviteLink = `${baseUrl}/invite/${token}`;
+      setShareLink(inviteLink);
+    } catch (error) {
+      console.error('Error generating share link:', error);
+      toast({
+        title: 'Error',
+        description: 'Could not generate share link. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  }, [firestore, user, circle, circleName, toast]);
+
   useEffect(() => {
     if (open) {
       if (isEditMode && circle) {
         setCircleName(circle.name);
         setMembersToInvite(['']);
+        // Generate share link for existing circle
+        if (firestore && user) {
+          generateShareLink(circle.id);
+        }
       } else {
         setCircleName('');
         setMembersToInvite(['']);
+        setShareLink(null);
       }
     }
-  }, [circle, isEditMode, open]);
+  }, [circle, isEditMode, open, firestore, user, generateShareLink]);
+
+  const copyShareLink = async () => {
+    if (!shareLink) return;
+    
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setLinkCopied(true);
+      toast({
+        title: 'Link Copied!',
+        description: 'Share this link via WhatsApp, SMS, or any messaging app.',
+      });
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Could not copy link. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const shareViaNative = async () => {
+    if (!shareLink || !circle) return;
+    
+    const shareData = {
+      title: `Join ${circle.name || circleName} on Daily Connect`,
+      text: `${user?.email || 'Someone'} invited you to join "${circle.name || circleName}" on Daily Connect. Click the link to join!`,
+      url: shareLink,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        // Fallback: copy to clipboard
+        await copyShareLink();
+      }
+    } catch (error) {
+      // User cancelled or error occurred
+      if ((error as Error).name !== 'AbortError') {
+        console.error('Error sharing:', error);
+      }
+    }
+  };
 
 
   const handleMemberChange = (index: number, value: string) => {
@@ -197,6 +284,8 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
             });
 
             await sendInvitations(circleRef.id, circleName);
+            // Generate share link for new circle
+            generateShareLink(circleRef.id);
         }
         setOpen(false);
     } catch (error) {
@@ -260,8 +349,8 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
           <DialogTitle>{isEditMode ? 'Manage Circle' : 'Create a New Circle'}</DialogTitle>
           <DialogDescription>
             {isEditMode 
-                ? `Editing "${circle?.name}". You can invite new members by email.`
-                : 'Give your circle a name and invite members to join via email.'
+                ? `Editing "${circle?.name}". Invite members by email or share a link via WhatsApp, SMS, or any messaging app.`
+                : 'Give your circle a name and invite members by email or share a link.'
             }
           </DialogDescription>
         </DialogHeader>
@@ -283,25 +372,90 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
                 <UserPlus className="h-4 w-4" />
                 Invite
             </Label>
-            <div className="col-span-3 space-y-2">
-                <p className="text-xs text-muted-foreground">Invite new members to this circle. If they don&apos;t have an account, they&apos;ll be prompted to create one.</p>
-                {membersToInvite.map((member, index) => (
-                    <div key={index} className="flex items-center gap-2">
+            <div className="col-span-3 space-y-4">
+                {/* Share Link Section */}
+                {isEditMode && circle && (
+                  <div className="space-y-2 p-3 bg-secondary/50 rounded-lg">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Share2 className="h-4 w-4" />
+                      Share Invitation Link
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Share this link via WhatsApp, SMS, Facebook Messenger, or any messaging app. Works for anyone, even without email!
+                    </p>
+                    {shareLink ? (
+                      <div className="flex items-center gap-2">
                         <Input
-                        type="email"
-                        placeholder="friend@example.com"
-                        value={member}
-                        onChange={(e) => handleMemberChange(index, e.target.value)}
+                          value={shareLink}
+                          readOnly
+                          className="font-mono text-xs"
                         />
-                        <Button variant="ghost" size="icon" onClick={() => removeMemberInput(index)} >
-                            <X className="h-4 w-4" />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={copyShareLink}
+                          className="gap-2"
+                        >
+                          {linkCopied ? (
+                            <>
+                              <Check className="h-4 w-4" />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-4 w-4" />
+                              Copy
+                            </>
+                          )}
                         </Button>
-                    </div>
-                ))}
-                <Button variant="outline" size="sm" onClick={addMemberInput} className="w-full">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Another
-                </Button>
+                        {typeof window !== 'undefined' && 'share' in navigator && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={shareViaNative}
+                            className="gap-2"
+                          >
+                            <Share2 className="h-4 w-4" />
+                            Share
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generateShareLink(circle.id)}
+                        className="w-full gap-2"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        Generate Share Link
+                      </Button>
+                    )}
+                  </div>
+                )}
+                
+                {/* Email Invitation Section */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Or invite by email</Label>
+                  <p className="text-xs text-muted-foreground">Invite new members to this circle by email. If they don&apos;t have an account, they&apos;ll be prompted to create one.</p>
+                  {membersToInvite.map((member, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                          <Input
+                          type="email"
+                          placeholder="friend@example.com"
+                          value={member}
+                          onChange={(e) => handleMemberChange(index, e.target.value)}
+                          />
+                          <Button variant="ghost" size="icon" onClick={() => removeMemberInput(index)} >
+                              <X className="h-4 w-4" />
+                          </Button>
+                      </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={addMemberInput} className="w-full">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Another Email
+                  </Button>
+                </div>
             </div>
           </div>
         </div>

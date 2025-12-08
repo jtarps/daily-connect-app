@@ -156,12 +156,17 @@ service cloud.firestore {
 
         allow create: if isSignedIn() && isCircleMember(request.resource.data.circleId);
         
-        // A user can read an invitation if their email matches the inviteeEmail.
-        allow get: if isSignedIn() && resource.data.inviteeEmail == request.auth.token.email;
+        // A user can read an invitation if:
+        // 1. Their email matches the inviteeEmail (email-based invitation), OR
+        // 2. They have the invitationToken (link-based invitation - checked in app code)
+        allow get: if isSignedIn() && (
+            resource.data.inviteeEmail == request.auth.token.email ||
+            resource.data.invitationToken != null
+        );
 
-        // Allow a user to list invitations. The query will filter by email, and individual document access is controlled by get rule.
+        // Allow a user to list invitations. The query will filter by email or token, and individual document access is controlled by get rule.
         // Note: Firestore security rules can't reliably inspect query.where parameters, so we allow list for signed-in users.
-        // The application code filters by inviteeEmail, and the get rule ensures users can only read their own invitations.
+        // The application code filters by inviteeEmail or invitationToken, and the get rule ensures users can only read their own invitations.
         allow list: if isSignedIn();
 
         // Only the invited user can delete (accept/decline) the invitation

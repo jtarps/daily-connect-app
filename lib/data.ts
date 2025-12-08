@@ -32,7 +32,8 @@ export interface Invitation {
     circleId: string;
     circleName: string;
     inviterId: string;
-    inviteeEmail: string;
+    inviteeEmail?: string; // Optional - for email-based invitations
+    invitationToken?: string; // For shareable link-based invitations
     status: 'pending';
     createdAt: Timestamp;
 }
