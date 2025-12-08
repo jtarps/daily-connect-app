@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
     { href: "/check-in", label: "Check-in", icon: Home },
-    { href: "/circle", label: "Circle", icon: Users },
+    { href: "/circle", label: "My Circle", icon: Users },
 ];
 
 const BottomNav = () => {

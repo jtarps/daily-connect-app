@@ -46,6 +46,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
   const [open, setOpen] = useState(false);
   const [circleName, setCircleName] = useState('');
   const [membersToInvite, setMembersToInvite] = useState<string[]>(['']);
+  const [phonesToInvite, setPhonesToInvite] = useState<string[]>(['']);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
       if (isEditMode && circle) {
         setCircleName(circle.name);
         setMembersToInvite(['']);
+        setPhonesToInvite(['']);
         // Generate share link for existing circle
         if (firestore && user) {
           generateShareLink(circle.id);
@@ -105,6 +107,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
       } else {
         setCircleName('');
         setMembersToInvite(['']);
+        setPhonesToInvite(['']);
         setShareLink(null);
       }
     }
@@ -174,13 +177,37 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
     }
   };
 
+  const handlePhoneChange = (index: number, value: string) => {
+    const newPhones = [...phonesToInvite];
+    newPhones[index] = value;
+    setPhonesToInvite(newPhones);
+  };
+
+  const addPhoneInput = () => {
+    setPhonesToInvite([...phonesToInvite, '']);
+  };
+
+  const removePhoneInput = (index: number) => {
+    const newPhones = phonesToInvite.filter((_, i) => i !== index);
+    if (newPhones.length === 0) {
+        setPhonesToInvite(['']);
+    } else {
+        setPhonesToInvite(newPhones);
+    }
+  };
+
   const sendInvitations = async (circleId: string, currentCircleName: string) => {
     if (!user || !firestore) return;
     const inviterId = user.uid;
     const emailsToInvite = membersToInvite.map(m => m.trim()).filter(m => m.length > 0 && m.includes('@'));
+    const phonesToInviteFiltered = phonesToInvite.map(p => p.trim()).filter(p => {
+      // Basic phone validation - should have at least 10 digits and start with +
+      const cleaned = p.replace(/\D/g, '');
+      return cleaned.length >= 10 && p.startsWith('+');
+    });
 
-    if (emailsToInvite.length === 0) {
-        toast({ title: "No new members to invite.", description: "Enter at least one valid email address."});
+    if (emailsToInvite.length === 0 && phonesToInviteFiltered.length === 0) {
+        toast({ title: "No new members to invite.", description: "Enter at least one valid email address or phone number."});
         return;
     };
     
@@ -188,8 +215,8 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
     let invitesSent = 0;
     let emailsSent = 0;
 
-    // Get inviter's name for email
-    let inviterName = user.email || 'Someone';
+    // Get inviter's name for notifications
+    let inviterName = user.email || user.phoneNumber || 'Someone';
     try {
       const userDoc = await getDoc(doc(firestore, 'users', user.uid));
       if (userDoc.exists()) {
@@ -202,6 +229,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
       console.error('Error fetching inviter name:', error);
     }
 
+    // Send email invitations
     for (const email of emailsToInvite) {
         try {
             const invitationData = {
@@ -237,6 +265,35 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
                 path: 'invitations',
                 operation: 'create',
                 requestResourceData: { circleId, inviteeEmail: email },
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        }
+    }
+
+    // Send phone invitations
+    for (const phone of phonesToInviteFiltered) {
+        try {
+            // Format phone number (ensure it starts with +)
+            const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+            
+            const invitationData = {
+                circleId: circleId,
+                circleName: currentCircleName,
+                inviterId: inviterId,
+                inviteePhone: formattedPhone,
+                status: 'pending' as const,
+                createdAt: serverTimestamp(),
+            };
+
+            // Create invitation in Firestore
+            await addDoc(invitationsRef, invitationData);
+            invitesSent++;
+        } catch (error) {
+            console.error(`Error sending invitation to ${phone}:`, error);
+            const permissionError = new FirestorePermissionError({
+                path: 'invitations',
+                operation: 'create',
+                requestResourceData: { circleId, inviteePhone: phone },
             });
             errorEmitter.emit('permission-error', permissionError);
         }
@@ -480,6 +537,29 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
                   <Button variant="outline" size="sm" onClick={addMemberInput} className="w-full">
                       <Plus className="mr-2 h-4 w-4" />
                       Add Another Email
+                  </Button>
+                </div>
+
+                {/* Phone Number Invitation Section */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Or invite by phone number</Label>
+                  <p className="text-xs text-muted-foreground">Invite new members by phone number. Include country code (e.g., +1234567890). They&apos;ll see the invitation when they sign up with that phone number.</p>
+                  {phonesToInvite.map((phone, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                          <Input
+                          type="tel"
+                          placeholder="+1234567890"
+                          value={phone}
+                          onChange={(e) => handlePhoneChange(index, e.target.value)}
+                          />
+                          <Button variant="ghost" size="icon" onClick={() => removePhoneInput(index)} >
+                              <X className="h-4 w-4" />
+                          </Button>
+                      </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={addPhoneInput} className="w-full">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Another Phone
                   </Button>
                 </div>
             </div>
