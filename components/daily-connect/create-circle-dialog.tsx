@@ -58,7 +58,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
   const isEditMode = mode === 'edit';
   const isOwner = isEditMode && circle && user?.uid === circle.ownerId;
 
-  const generateShareLink = useCallback(async (circleId: string) => {
+  const generateShareLink = useCallback(async (circleId: string, circleNameForInvite?: string) => {
     if (!firestore || !user) return;
     
     try {
@@ -70,7 +70,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
       // Create a link-based invitation
       const invitationData = {
         circleId: circleId,
-        circleName: circle?.name || circleName,
+        circleName: circleNameForInvite || circle?.name || '',
         inviterId: user.uid,
         invitationToken: token,
         status: 'pending' as const,
@@ -92,7 +92,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
         variant: 'destructive',
       });
     }
-  }, [firestore, user, circle, circleName, toast]);
+  }, [firestore, user, circle, toast]);
 
   useEffect(() => {
     if (open) {
@@ -405,7 +405,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
 
             await sendInvitations(circleRef.id, circleName);
             // Generate share link for new circle
-            generateShareLink(circleRef.id);
+            generateShareLink(circleRef.id, circleName);
         }
         setOpen(false);
     } catch (error) {
@@ -485,6 +485,8 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
               onChange={(e) => setCircleName(e.target.value)}
               className="col-span-3"
               placeholder="e.g., Family, Book Club"
+              autoFocus
+              disabled={isSaving || isDeleting}
             />
           </div>
           <div className="grid grid-cols-4 items-start gap-4">
