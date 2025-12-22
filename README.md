@@ -31,6 +31,17 @@ npm run dev:network
 
 Then access from your phone at `http://YOUR_IP:3000`
 
+## Native Apps (iOS & Android)
+
+Convert your PWA to native iOS and Android apps using Capacitor!
+
+**Quick Start:**
+```bash
+./scripts/setup-capacitor.sh
+```
+
+See [QUICK_START_NATIVE.md](./QUICK_START_NATIVE.md) for 5-minute setup, or [NATIVE_APP_SETUP.md](./NATIVE_APP_SETUP.md) for detailed instructions.
+
 ## Deployment
 
 See [QUICK_DEPLOY.md](./QUICK_DEPLOY.md) for deployment instructions.
@@ -39,6 +50,7 @@ See [QUICK_DEPLOY.md](./QUICK_DEPLOY.md) for deployment instructions.
 
 - **Next.js 15** - React framework
 - **Firebase** - Authentication, Firestore, Cloud Messaging
+- **Capacitor** - Native iOS & Android apps
 - **TypeScript** - Type safety
 - **Tailwind CSS** - Styling
 - **Radix UI** - Accessible components

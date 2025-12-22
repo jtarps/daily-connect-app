@@ -19,6 +19,8 @@ import {
 import { signOut } from 'firebase/auth';
 import { CheckInIntervalSettings } from './check-in-interval-settings';
 import { usePWAInstall } from './pwa-install-prompt';
+import { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 const navItems = [
     { href: "/check-in", label: "Check-in", icon: Home },
@@ -31,6 +33,40 @@ const Header = () => {
   const router = useRouter();
   const pathname = usePathname();
   const { canInstall, handleInstall } = usePWAInstall();
+  const [safeAreaTop, setSafeAreaTop] = useState(0);
+
+  useEffect(() => {
+    const updateSafeArea = () => {
+      if (typeof window === 'undefined') return;
+      
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const isNative = Capacitor.isNativePlatform();
+      
+      if (isIOS && isNative) {
+        // For iOS native apps, detect notch based on screen size
+        // iPhone X and later (with notch) have height >= 812
+        const screenHeight = Math.max(window.screen.height, window.screen.width);
+        const hasNotch = screenHeight >= 812; // iPhone X (812pt) and later
+        
+        // iPhone 16 Pro has 932pt height, safe area is typically 59px
+        // But we'll use a conservative 44px which works for most iPhones with notch
+        setSafeAreaTop(hasNotch ? 44 : 20);
+      } else {
+        // For web or non-iOS, try CSS env() variable, default to 0
+        setSafeAreaTop(0);
+      }
+    };
+
+    updateSafeArea();
+    // Listen for orientation changes
+    window.addEventListener('orientationchange', updateSafeArea);
+    window.addEventListener('resize', updateSafeArea);
+    
+    return () => {
+      window.removeEventListener('orientationchange', updateSafeArea);
+      window.removeEventListener('resize', updateSafeArea);
+    };
+  }, []);
 
   const handleSignOut = async () => {
     if (!auth) return;
@@ -47,7 +83,13 @@ const Header = () => {
   }
 
   return (
-    <header className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+    <header 
+      className="border-b bg-card/80 backdrop-blur-sm sticky top-0 z-10" 
+      style={{ 
+        // Use calculated safe area, or fall back to CSS env() variable
+        paddingTop: safeAreaTop > 0 ? `${safeAreaTop}px` : 'env(safe-area-inset-top, 0px)',
+      }}
+    >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
         <div className="flex items-center gap-3">
           <div className="bg-primary p-2 rounded-lg shadow-md">

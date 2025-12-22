@@ -103,20 +103,21 @@ export function PWAInstallPrompt() {
     // Only run on client side
     if (typeof window === 'undefined') return;
     
-    // Only auto-show if we have the prompt event and haven't dismissed it
-    const wasDismissed = sessionStorage.getItem('pwa-prompt-dismissed');
+    // Only auto-show if we have the prompt event and haven't dismissed it permanently
+    const wasDismissed = localStorage.getItem('pwa-prompt-dismissed');
     if (canInstall && !isInstalled && !wasDismissed) {
       // Delay showing the prompt slightly
       const timer = setTimeout(() => {
         setShowPrompt(true);
-      }, 3000); // Show after 3 seconds
+      }, 5000); // Show after 5 seconds (less intrusive)
       return () => clearTimeout(timer);
     }
   }, [canInstall, isInstalled]);
 
   const handleDismiss = () => {
     setShowPrompt(false);
-    sessionStorage.setItem('pwa-prompt-dismissed', 'true');
+    // Store dismissal permanently in localStorage (not sessionStorage)
+    localStorage.setItem('pwa-prompt-dismissed', 'true');
   };
 
   if (isInstalled || !showPrompt) {

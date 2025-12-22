@@ -464,8 +464,8 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>{isEditMode ? 'Manage Circle' : 'Create a New Circle'}</DialogTitle>
           <DialogDescription>
             {isEditMode 
@@ -474,7 +474,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
             }
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-4 py-4 overflow-y-auto flex-1 min-h-0 pr-1 -mr-1">
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="name" className="text-right">
               Name
@@ -604,7 +604,7 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
             </div>
           </div>
         </div>
-        <DialogFooter className="flex justify-between items-center">
+        <DialogFooter className="flex justify-between items-center flex-shrink-0 border-t pt-4 mt-4">
           <div>
             {isEditMode && isOwner && (
               <AlertDialog>

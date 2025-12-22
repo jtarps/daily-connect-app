@@ -30,16 +30,34 @@ function initializeFirebase() {
       firebaseApp = initializeApp();
     } catch (e) {
       // Fall back to explicit config
-      // Validate all required config values before using it
+      // In the browser, prioritize process.env.NEXT_PUBLIC_* (Next.js bundles these at build time)
+      // Only fall back to firebaseConfig if process.env is not available
       const missingVars: string[] = [];
-      // Check both process.env and firebaseConfig to catch any issues
+      
+      // In browser, process.env.NEXT_PUBLIC_* should be available (Next.js replaces them at build time)
+      // In browser, we should ONLY use process.env, not firebaseConfig (which may have empty strings from import time)
+      const isBrowser = typeof window !== 'undefined';
       const envVars = {
-        apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || firebaseConfig.apiKey,
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || firebaseConfig.projectId,
-        appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || firebaseConfig.appId,
-        authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || firebaseConfig.authDomain,
-        messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || firebaseConfig.messagingSenderId,
+        apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || (isBrowser ? '' : firebaseConfig.apiKey),
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || (isBrowser ? '' : firebaseConfig.projectId),
+        appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || (isBrowser ? '' : firebaseConfig.appId),
+        authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || (isBrowser ? '' : firebaseConfig.authDomain),
+        messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || (isBrowser ? '' : firebaseConfig.messagingSenderId),
       };
+
+      // Log detailed debug info
+      console.log('Firebase initialization - checking env vars:', {
+        'process.env.NEXT_PUBLIC_FIREBASE_API_KEY': process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? `${process.env.NEXT_PUBLIC_FIREBASE_API_KEY.substring(0, 10)}...` : 'NOT SET',
+        'process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID': process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'NOT SET',
+        'process.env.NEXT_PUBLIC_FIREBASE_APP_ID': process.env.NEXT_PUBLIC_FIREBASE_APP_ID || 'NOT SET',
+        'process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN': process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'NOT SET',
+        'process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID': process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || 'NOT SET',
+        'firebaseConfig.apiKey': firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'EMPTY',
+        'firebaseConfig.projectId': firebaseConfig.projectId || 'EMPTY',
+        'envVars.apiKey': envVars.apiKey ? `${envVars.apiKey.substring(0, 10)}...` : 'EMPTY',
+        'envVars.projectId': envVars.projectId || 'EMPTY',
+        'isBrowser': isBrowser,
+      });
 
       if (!envVars.apiKey || envVars.apiKey.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_API_KEY');
       if (!envVars.projectId || envVars.projectId.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
@@ -53,7 +71,15 @@ function initializeFirebase() {
           ? `Firebase configuration is missing. Missing environment variables: ${missingVars.join(', ')}. Please check your Vercel project settings (Settings → Environment Variables) and ensure all NEXT_PUBLIC_FIREBASE_* variables are set. After adding variables, you may need to redeploy.`
           : `Firebase configuration is missing. Missing environment variables: ${missingVars.join(', ')}. Please check your .env.local file and ensure all NEXT_PUBLIC_FIREBASE_* variables are set. Restart your dev server after adding environment variables.`;
         const error = new Error(errorMessage);
-        console.error(error);
+        console.error('Firebase initialization error:', error);
+        console.error('Missing variables:', missingVars);
+        console.error('Env vars state:', {
+          apiKey: envVars.apiKey ? 'present' : 'missing',
+          projectId: envVars.projectId ? 'present' : 'missing',
+          appId: envVars.appId ? 'present' : 'missing',
+          authDomain: envVars.authDomain ? 'present' : 'missing',
+          messagingSenderId: envVars.messagingSenderId ? 'present' : 'missing',
+        });
         throw error;
       }
       
@@ -74,21 +100,53 @@ function initializeFirebase() {
     }
 
     const isBrowser = typeof window !== 'undefined';
+    // Only initialize messaging if service workers are supported (not in Capacitor WebView)
+    let messaging = null;
+    if (isBrowser) {
+      try {
+        // Check if service workers are available before initializing messaging
+        if ('serviceWorker' in navigator && navigator.serviceWorker !== undefined) {
+          messaging = getMessaging(firebaseApp);
+        } else {
+          console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
+        }
+      } catch (error) {
+        console.warn('Firebase Messaging: Failed to initialize. This is expected in Capacitor WebView or unsupported browsers.', error);
+        messaging = null;
+      }
+    }
+    
     return {
       firebaseApp,
       auth: getAuth(firebaseApp),
       firestore: getFirestore(firebaseApp),
-      messaging: isBrowser ? getMessaging(firebaseApp) : null,
+      messaging,
     };
   }
 
   const app = getApp();
   const isBrowser = typeof window !== 'undefined';
+  // Only initialize messaging if service workers are supported (not in Capacitor WebView)
+  let messaging = null;
+  if (isBrowser) {
+    try {
+      // Check if service workers are available before initializing messaging
+      if ('serviceWorker' in navigator && navigator.serviceWorker !== undefined) {
+        messaging = getMessaging(app);
+      } else {
+        console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
+      }
+    } catch (error) {
+      console.warn('Firebase Messaging: Failed to initialize. This is expected in Capacitor WebView or unsupported browsers.', error);
+      messaging = null;
+    }
+  }
+  
   return {
     firebaseApp: app,
     auth: getAuth(app),
     firestore: getFirestore(app),
-    messaging: isBrowser ? getMessaging(app) : null,
+    messaging,
   };
 }
 

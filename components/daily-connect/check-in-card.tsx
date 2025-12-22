@@ -15,6 +15,7 @@ import {
   AlertTriangle,
   Loader,
   Hand,
+  Undo2,
 } from "lucide-react";
 import { useShake } from "@/hooks/use-shake";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +33,8 @@ import {
   doc,
   runTransaction,
   getDocs,
+  deleteDoc,
+  updateDoc,
 } from "firebase/firestore";
 import type { User } from "@/lib/data";
 import {
@@ -244,16 +247,90 @@ const CheckInCard = () => {
 
   const { startListening, permission, isListening } = useShake(performCheckIn);
 
-  useEffect(() => {
-    if (permission === "granted") {
-      startListening();
-    }
-  }, [permission, startListening]);
+  // Note: startListening is called from the button click (user gesture required)
+  // We don't auto-start here because permission must be requested from user interaction
 
   const checkedInTime = latestCheckIn?.timestamp?.toDate();
   const hasCheckedInRecently = checkedInTime
     ? isWithinInterval(checkedInTime, checkInInterval, new Date(), customHours)
     : false;
+
+  // Check if we're in test/development mode
+  const isTestMode = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_TEST_MODE === 'true';
+
+  const undoCheckIn = useCallback(async () => {
+    if (!user || !firestore || !latestCheckIn) {
+      console.error("Undo check-in: Missing requirements", { user: !!user, firestore: !!firestore, latestCheckIn: !!latestCheckIn });
+      toast({
+        title: "Error",
+        description: "Unable to undo check-in. Missing required data.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!latestCheckIn.id) {
+      console.error("Undo check-in: latestCheckIn missing id", latestCheckIn);
+      toast({
+        title: "Error",
+        description: "Check-in data is invalid. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const checkInRef = doc(firestore, "users", user.uid, "checkIns", latestCheckIn.id);
+      const userRef = doc(firestore, "users", user.uid);
+
+      console.log("Undo check-in: Starting transaction", { checkInId: latestCheckIn.id, userId: user.uid });
+
+      await runTransaction(firestore, async (transaction) => {
+        // IMPORTANT: Firestore transactions require ALL reads before ALL writes
+        // Read both documents first
+        const checkInDoc = await transaction.get(checkInRef);
+        if (!checkInDoc.exists()) {
+          throw new Error("Check-in document does not exist");
+        }
+
+        const userDoc = await transaction.get(userRef);
+        
+        // Now perform all writes after all reads
+        // Delete the check-in
+        transaction.delete(checkInRef);
+
+        // Adjust streak if user document exists
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          const currentStreak = userData.streak || 0;
+          
+          // If this was the only check-in, reset streak to 0
+          // Otherwise, we could decrement, but for simplicity, just reset if it was 1
+          if (currentStreak === 1) {
+            transaction.update(userRef, { streak: 0 });
+          } else if (currentStreak > 1) {
+            // Decrement streak by 1
+            transaction.update(userRef, { streak: currentStreak - 1 });
+          }
+        }
+      });
+
+      console.log("Undo check-in: Transaction completed successfully");
+      toast({
+        title: "Check-in Undone",
+        description: "Your check-in has been removed. You can check in again.",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Failed to undo check-in:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast({
+        title: "Error",
+        description: `Failed to undo check-in: ${errorMessage}`,
+        variant: "destructive",
+      });
+    }
+  }, [user, firestore, latestCheckIn, toast]);
 
   const renderContent = () => {
     if (isUserLoading || isCheckInLoading) {
@@ -287,6 +364,17 @@ const CheckInCard = () => {
               </p>
             )}
           </div>
+          {isTestMode && (
+            <Button
+              onClick={undoCheckIn}
+              variant="outline"
+              size="sm"
+              className="mt-2"
+            >
+              <Undo2 className="mr-2 h-4 w-4" />
+              Undo Check-in (Test Mode)
+            </Button>
+          )}
         </div>
       );
     }
@@ -296,23 +384,34 @@ const CheckInCard = () => {
         <div className="text-center flex flex-col items-center gap-4">
           <div className="relative">
             <Hand className="h-16 w-16 text-primary" />
-            {permission === "prompt" && (
+            {(permission === "prompt" || permission === "denied") && (
               <Button
                 onClick={startListening}
                 size="sm"
                 className="absolute -top-2 -right-2"
+                variant={permission === "denied" ? "outline" : "default"}
               >
-                Enable Shake
+                {permission === "denied" ? "Retry" : "Enable"}
               </Button>
             )}
           </div>
 
           <p className="text-muted-foreground mb-2 text-center">
-            {permission === "denied"
-              ? "Motion detection is disabled."
-              : "Enable shake to check-in,"}
-            <br />
-            or check in manually.
+            {permission === "denied" ? (
+              <>
+                Motion detection is disabled.
+                <br />
+                <span className="text-xs mt-1 block text-muted-foreground/80">
+                  Tap "Retry" to request permission again, or use the button below to check in manually.
+                </span>
+              </>
+            ) : (
+              <>
+                Enable shake to check-in,
+                <br />
+                or check in manually.
+              </>
+            )}
           </p>
           <Button onClick={performCheckIn} size="lg" className="w-full">
             <Hand className="mr-2" /> I&apos;m OK

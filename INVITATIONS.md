@@ -68,6 +68,7 @@ If email service is not configured, invitations are still created in Firestore, 
 ## WhatsApp Notifications Setup (Recommended - Much Cheaper!)
 
 **Cost Comparison:**
+
 - **WhatsApp Business API:** ~$0.0014 per message (utility/authentication)
 - **SMS:** $0.06 per message (after Firebase free tier)
 - **WhatsApp is ~43x cheaper!** 🎉

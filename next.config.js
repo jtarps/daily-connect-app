@@ -20,6 +20,10 @@ const nextConfig = {
       },
     ];
   },
+  // Capacitor configuration - allow loading from Capacitor
+  async rewrites() {
+    return [];
+  },
 }
 
 module.exports = nextConfig

@@ -1,8 +1,7 @@
 
 "use client";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getPlaceholderImage } from "@/lib/placeholder-images";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatCheckInTime, cn } from "@/lib/utils";
 import { AlertTriangle, Bell, Flame, Loader } from "lucide-react";
 import { Button } from "../ui/button";
@@ -101,8 +100,6 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
   }
 
   const { text, needsAttention, status } = formatCheckInTime(lastCheckIn?.timestamp?.toDate());
-  const friendImageId = `friend${parseInt(friend.id.substring(0,1), 36) % 4 + 1}`;
-  const friendImage = getPlaceholderImage(friendImageId) || getPlaceholderImage('user');
 
   return (
     <div
@@ -112,8 +109,9 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
       )}
     >
       <Avatar className="h-12 w-12 border-2 border-white">
-        {friendImage && <AvatarImage src={friendImage.imageUrl} alt={friend.firstName} data-ai-hint={friendImage.imageHint}/>}
-        <AvatarFallback>{friend.firstName.substring(0, 1)}{friend.lastName.substring(0, 1)}</AvatarFallback>
+        <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
+          {friend.firstName.substring(0, 1)}{friend.lastName.substring(0, 1)}
+        </AvatarFallback>
       </Avatar>
       <div className="flex-1">
         <p className="font-semibold flex items-center gap-2">

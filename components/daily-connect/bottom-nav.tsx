@@ -14,7 +14,7 @@ const BottomNav = () => {
     const pathname = usePathname();
 
     return (
-        <nav className="sticky bottom-0 left-0 right-0 border-t bg-card/80 backdrop-blur-sm z-10 md:hidden">
+        <nav className="sticky bottom-0 left-0 right-0 border-t bg-card/80 backdrop-blur-sm z-10 md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-around h-16">
                     {navItems.map((item) => {

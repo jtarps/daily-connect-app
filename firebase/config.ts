@@ -38,4 +38,5 @@ export const firebaseConfig = {
 };
 
 // This is the VAPID key for web push notifications
-export const VAPID_KEY = 'YOUR_VAPID_KEY_HERE';
+// Get this from Firebase Console → Project Settings → Cloud Messaging → Web Push certificates
+export const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || 'YOUR_VAPID_KEY_HERE';

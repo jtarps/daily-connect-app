@@ -63,8 +63,16 @@
   * {
     @apply border-border;
   }
+  html {
+    /* Ensure html extends into safe areas */
+    margin: 0;
+    padding: 0;
+  }
   body {
     @apply bg-background text-foreground;
+    /* Body should extend full screen - safe area padding is handled by individual elements */
+    margin: 0;
+    padding: 0;
   }
 }
 
