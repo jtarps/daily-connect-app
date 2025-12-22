@@ -402,7 +402,7 @@ const CheckInCard = () => {
                 Motion detection is disabled.
                 <br />
                 <span className="text-xs mt-1 block text-muted-foreground/80">
-                  Tap "Retry" to request permission again, or use the button below to check in manually.
+                  Tap &quot;Retry&quot; to request permission again, or use the button below to check in manually.
                 </span>
               </>
             ) : (
