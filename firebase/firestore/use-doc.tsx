@@ -63,7 +63,10 @@ export function useDoc<T = any>(
       memoizedDocRef,
       (snapshot: DocumentSnapshot<DocumentData>) => {
         if (snapshot.exists()) {
-          setData({ ...(snapshot.data() as T), id: snapshot.id });
+          // Firefox-safe: Use Object.assign instead of spread to avoid XrayWrapper issues
+          const docData = snapshot.data() as T;
+          const dataWithId = Object.assign({}, docData, { id: snapshot.id });
+          setData(dataWithId);
         } else {
           // Document does not exist
           setData(null);

@@ -77,8 +77,11 @@ export function useCollection<T = any>(
       memoizedTargetRefOrQuery,
       (snapshot: QuerySnapshot<DocumentData>) => {
         const results: ResultItemType[] = [];
-        for (const doc of snapshot.docs) {
-          results.push({ ...(doc.data() as T), id: doc.id });
+        for (const docSnapshot of snapshot.docs) {
+          // Firefox-safe: Use Object.assign instead of spread to avoid XrayWrapper issues
+          const docData = docSnapshot.data() as T;
+          const dataWithId = Object.assign({}, docData, { id: docSnapshot.id });
+          results.push(dataWithId);
         }
         setData(results);
         setError(null);
