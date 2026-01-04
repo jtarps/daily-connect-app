@@ -65,7 +65,7 @@ export async function sendReminder(input: ReminderInput) {
           console.log(`No FCM tokens found for user ${recipientName}.`);
           return {
             success: false,
-            message: `Couldn't send a reminder to ${recipientName} as they have not enabled notifications.`,
+            message: `${recipientName} hasn't enabled notifications yet. They can enable them by clicking the bell icon in the app header.`,
           };
         }
 

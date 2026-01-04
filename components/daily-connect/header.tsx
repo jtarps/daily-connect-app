@@ -19,6 +19,7 @@ import {
 import { signOut } from 'firebase/auth';
 import { CheckInIntervalSettings } from './check-in-interval-settings';
 import { usePWAInstall } from './pwa-install-prompt';
+import { NotificationSettings } from './notification-settings';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 
@@ -34,6 +35,7 @@ const Header = () => {
   const pathname = usePathname();
   const { canInstall, handleInstall } = usePWAInstall();
   const [safeAreaTop, setSafeAreaTop] = useState(0);
+  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
 
   useEffect(() => {
     const updateSafeArea = () => {
@@ -133,9 +135,18 @@ const Header = () => {
               <Download className="h-5 w-5" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" aria-label="Notifications">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            aria-label="Notifications"
+            onClick={() => setNotificationSettingsOpen(true)}
+          >
             <Bell className="h-5 w-5" />
           </Button>
+          <NotificationSettings 
+            open={notificationSettingsOpen} 
+            onOpenChange={setNotificationSettingsOpen} 
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Avatar className="cursor-pointer">

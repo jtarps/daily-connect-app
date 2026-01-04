@@ -143,8 +143,8 @@ export function NotificationManager() {
     return null;
   }
 
-  // This component doesn't render anything itself, but it could render a UI for managing notifications.
-  // For example, if permission is 'prompt', render a button to request it.
+  // Show prompt if permission is 'prompt' and not dismissed
+  // Also show if permission was denied but user might want to try again
   if (notificationPermission === 'prompt' && !isDismissed) {
       return (
           <div className="fixed bottom-24 right-4 z-[100] sm:bottom-20">
@@ -157,7 +157,9 @@ export function NotificationManager() {
                       <X className="h-4 w-4 text-muted-foreground" />
                   </button>
                   <p className="text-sm font-medium pr-6">Enable Notifications</p>
-                  <p className="text-sm text-muted-foreground mt-1 mb-3">Get reminders and alerts from your circle.</p>
+                  <p className="text-sm text-muted-foreground mt-1 mb-3">
+                    Get reminders and alerts from your circle. You can also enable this later from the notification bell icon.
+                  </p>
                   <Button 
                       onClick={requestPermission} 
                       size="lg" 
@@ -166,6 +168,26 @@ export function NotificationManager() {
                   >
                       Enable
                   </Button>
+              </div>
+          </div>
+      )
+  }
+
+  // If permission was denied, show a less intrusive reminder
+  if (notificationPermission === 'denied' && !isDismissed) {
+      return (
+          <div className="fixed bottom-24 right-4 z-[100] sm:bottom-20">
+              <div className="bg-muted border rounded-lg shadow-lg p-3 max-w-sm relative">
+                  <button
+                      onClick={handleDismiss}
+                      className="absolute top-2 right-2 p-1 rounded-md hover:bg-background transition-colors"
+                      aria-label="Close"
+                  >
+                      <X className="h-3 w-3 text-muted-foreground" />
+                  </button>
+                  <p className="text-xs text-muted-foreground">
+                    Notifications are blocked. Click the bell icon to enable them.
+                  </p>
               </div>
           </div>
       )

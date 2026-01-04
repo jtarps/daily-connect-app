@@ -13,6 +13,7 @@ import { doc, collection, query, orderBy, limit, getDoc } from "firebase/firesto
 import type { User, CheckIn } from "@/lib/data";
 import { sendReminder } from "@/app/actions";
 import { useState } from "react";
+import { Badge } from "../ui/badge";
 
 
 interface FriendStatusCardProps {
@@ -43,6 +44,14 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
     );
   }, [firestore, userId]);
   const { data: latestCheckIns, isLoading: isLoadingCheckIn } = useCollection<CheckIn>(checkInsQuery);
+  
+  // Check if friend has notifications enabled (has FCM tokens)
+  const fcmTokensQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return collection(firestore, 'users', userId, 'fcmTokens');
+  }, [firestore, userId]);
+  const { data: fcmTokens } = useCollection(fcmTokensQuery);
+  const hasNotificationsEnabled = fcmTokens && fcmTokens.length > 0;
   
   const lastCheckIn = latestCheckIns?.[0];
 
@@ -114,12 +123,23 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
         </AvatarFallback>
       </Avatar>
       <div className="flex-1">
-        <p className="font-semibold flex items-center gap-2">
+        <p className="font-semibold flex items-center gap-2 flex-wrap">
             {friend.firstName} {friend.lastName}
             {friend.streak && friend.streak > 1 && (
                 <span className="flex items-center gap-1 text-xs font-medium text-orange-500 bg-orange-100 px-2 py-0.5 rounded-full">
                     <Flame className="h-3 w-3"/> {friend.streak}
                 </span>
+            )}
+            {hasNotificationsEnabled ? (
+              <Badge variant="default" className="bg-green-500 text-xs">
+                <Bell className="h-3 w-3 mr-1" />
+                Notifications
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-xs">
+                <Bell className="h-3 w-3 mr-1 opacity-50" />
+                No Notifications
+              </Badge>
             )}
         </p>
         <p
@@ -132,6 +152,11 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
         >
           {text}
         </p>
+        {needsAttention && !hasNotificationsEnabled && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Reminders unavailable - {friend.firstName} hasn&apos;t enabled notifications
+          </p>
+        )}
       </div>
       {needsAttention && (
         <div className="flex items-center gap-2">
