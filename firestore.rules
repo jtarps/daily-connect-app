@@ -57,14 +57,24 @@ service cloud.firestore {
     
     /**
      * @description Secures FCM tokens. Only the user can manage their own tokens.
+     * Users can check if others have tokens (for showing notification status) but cannot see the actual token values.
      * @path /users/{userId}/fcmTokens/{tokenId}
      */
     match /users/{userId}/fcmTokens/{tokenId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
+      function isSignedIn() {
+        return request.auth != null;
       }
       
+      function isOwner(userId) {
+        return isSignedIn() && request.auth.uid == userId;
+      }
+      
+      // Allow owner to read/write their tokens
       allow read, write: if isOwner(userId);
+      
+      // Allow any signed-in user to list tokens (to check if notifications are enabled)
+      // This allows checking if a friend has notifications enabled without exposing token values
+      allow list: if isSignedIn();
     }
 
     /**

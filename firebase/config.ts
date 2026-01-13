@@ -16,12 +16,13 @@ function getRequiredEnvVar(name: string): string {
         `Please check your .env.local file and ensure all NEXT_PUBLIC_FIREBASE_* variables are set.`
       );
     } else {
-      // Client-side: log detailed warning
+      // Client-side: log detailed warning but don't throw
+      // In Capacitor native apps, env vars might not be available immediately
       const isProduction = process.env.NODE_ENV === 'production';
       const message = isProduction
         ? `Missing required environment variable: ${name}. Please check your Vercel project settings and ensure ${name} is set in Environment Variables.`
-        : `Missing required environment variable: ${name}. Please check your .env.local file.`;
-      console.error(message);
+        : `Missing required environment variable: ${name}. Please check your .env.local file. For native apps, ensure the dev server has these variables set.`;
+      console.warn(message);
       return '';
     }
   }

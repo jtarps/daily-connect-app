@@ -19,6 +19,12 @@ export function NotificationManager() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'prompt' | 'unsupported'>('prompt');
   const [isDismissed, setIsDismissed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Prevent hydration errors by only rendering on client
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Effect to listen for incoming foreground messages
   useEffect(() => {
@@ -184,6 +190,11 @@ export function NotificationManager() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('notification-prompt-dismissed', 'true');
     }
+  }
+
+  // Prevent hydration errors - don't render until mounted
+  if (!isMounted) {
+    return null;
   }
 
   // Don't show notification prompt if user is not logged in
