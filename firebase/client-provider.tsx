@@ -106,6 +106,17 @@ function initializeFirebase() {
       try {
         // Check if service workers are available before initializing messaging
         if ('serviceWorker' in navigator && navigator.serviceWorker !== undefined) {
+          // Register Firebase Messaging service worker (async, but we don't wait for it)
+          // Firebase Messaging will automatically use it once registered
+          navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+            scope: '/',
+          }).then((registration) => {
+            console.log('Firebase Messaging service worker registered:', registration);
+          }).catch((error) => {
+            console.warn('Failed to register Firebase Messaging service worker:', error);
+          });
+          
+          // Initialize messaging - it will automatically use the service worker once registered
           messaging = getMessaging(firebaseApp);
         } else {
           console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
@@ -132,6 +143,17 @@ function initializeFirebase() {
     try {
       // Check if service workers are available before initializing messaging
       if ('serviceWorker' in navigator && navigator.serviceWorker !== undefined) {
+        // Register Firebase Messaging service worker (async, but we don't wait for it)
+        // Firebase Messaging will automatically use it once registered
+        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          scope: '/',
+        }).then((registration) => {
+          console.log('Firebase Messaging service worker registered:', registration);
+        }).catch((error) => {
+          console.warn('Failed to register Firebase Messaging service worker:', error);
+        });
+        
+        // Initialize messaging - it will automatically use the service worker once registered
         messaging = getMessaging(app);
       } else {
         console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
