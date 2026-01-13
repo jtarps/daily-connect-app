@@ -17,6 +17,7 @@ export function NotificationManager() {
   const { toast } = useToast();
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'prompt' | 'unsupported'>('prompt');
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Effect to listen for incoming foreground messages
   useEffect(() => {
@@ -80,53 +81,80 @@ export function NotificationManager() {
   }, [messaging, user, firestore]);
   
   const requestPermission = async () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const permission = await Notification.requestPermission();
-        setNotificationPermission(permission);
-        if (permission === 'granted') {
-          // Trigger token registration by updating state
-          // The useEffect will handle token registration
-          if (messaging && user && firestore) {
-            try {
-              const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
-              if (currentToken) {
-                console.log('FCM Token:', currentToken);
-                const tokenRef = doc(firestore, 'users', user.uid, 'fcmTokens', currentToken);
-                await setDoc(tokenRef, {
-                  token: currentToken,
-                  createdAt: serverTimestamp(),
-                });
-                toast({
-                  title: 'Notifications Enabled',
-                  description: 'You\'ll now receive reminders and alerts from your circle.',
-                });
-                setIsDismissed(true);
-              }
-            } catch (err) {
-              console.error('Error getting token:', err);
-              toast({
-                title: 'Error',
-                description: 'Failed to enable notifications. Please try again.',
-                variant: 'destructive',
-              });
-            }
+    if (isLoading) return; // Prevent double-clicks
+    
+    console.log('requestPermission called', { messaging: !!messaging, user: !!user, firestore: !!firestore });
+    
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      toast({
+        title: 'Not Supported',
+        description: 'Notifications are not supported in this environment.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!messaging || !user || !firestore) {
+      toast({
+        title: 'Error',
+        description: 'Firebase services are not ready. Please refresh the page.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const permission = await Notification.requestPermission();
+      console.log('Notification permission result:', permission);
+      setNotificationPermission(permission);
+      
+      if (permission === 'granted') {
+        try {
+          const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+          if (currentToken) {
+            console.log('FCM Token:', currentToken);
+            const tokenRef = doc(firestore, 'users', user.uid, 'fcmTokens', currentToken);
+            await setDoc(tokenRef, {
+              token: currentToken,
+              createdAt: serverTimestamp(),
+            });
+            toast({
+              title: 'Notifications Enabled',
+              description: 'You\'ll now receive reminders and alerts from your circle.',
+            });
+            setIsDismissed(true);
+          } else {
+            toast({
+              title: 'Error',
+              description: 'Failed to get notification token. Please try again.',
+              variant: 'destructive',
+            });
           }
-        } else if (permission === 'denied') {
+        } catch (err) {
+          console.error('Error getting token:', err);
           toast({
-            title: 'Notifications Blocked',
-            description: 'Please enable notifications in your browser settings.',
+            title: 'Error',
+            description: 'Failed to enable notifications. Please try again.',
             variant: 'destructive',
           });
         }
-      } catch (error) {
-        console.error('Error requesting notification permission:', error);
+      } else if (permission === 'denied') {
         toast({
-          title: 'Error',
-          description: 'Failed to request notification permission.',
+          title: 'Notifications Blocked',
+          description: 'Please enable notifications in your browser settings.',
           variant: 'destructive',
         });
       }
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to request notification permission.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -147,12 +175,17 @@ export function NotificationManager() {
   // Also show if permission was denied but user might want to try again
   if (notificationPermission === 'prompt' && !isDismissed) {
       return (
-          <div className="fixed bottom-24 right-4 z-[100] sm:bottom-20">
-              <div className="bg-background border rounded-lg shadow-lg p-4 max-w-sm relative">
+          <div className="fixed bottom-24 right-4 z-[100] sm:bottom-20 pointer-events-auto">
+              <div className="bg-background border rounded-lg shadow-lg p-4 max-w-sm relative pointer-events-auto">
                   <button
-                      onClick={handleDismiss}
-                      className="absolute top-2 right-2 p-1 rounded-md hover:bg-muted transition-colors"
+                      onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDismiss();
+                      }}
+                      className="absolute top-2 right-2 p-1 rounded-md hover:bg-muted transition-colors z-10 pointer-events-auto"
                       aria-label="Close"
+                      type="button"
                   >
                       <X className="h-4 w-4 text-muted-foreground" />
                   </button>
@@ -161,12 +194,18 @@ export function NotificationManager() {
                     Get reminders and alerts from your circle. You can also enable this later from the notification bell icon.
                   </p>
                   <Button 
-                      onClick={requestPermission} 
+                      onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          requestPermission();
+                      }}
                       size="lg" 
-                      className="w-full touch-manipulation min-h-[44px] text-base"
-                      style={{ WebkitTapHighlightColor: 'transparent' }}
+                      className="w-full touch-manipulation min-h-[44px] text-base pointer-events-auto"
+                      style={{ WebkitTapHighlightColor: 'transparent', pointerEvents: 'auto' }}
+                      type="button"
+                      disabled={isLoading}
                   >
-                      Enable
+                      {isLoading ? 'Enabling...' : 'Enable'}
                   </Button>
               </div>
           </div>
