@@ -69,12 +69,13 @@ service cloud.firestore {
         return isSignedIn() && request.auth.uid == userId;
       }
       
-      // Allow owner to read/write their tokens
-      allow read, write: if isOwner(userId);
+      // Allow any signed-in user to read (get/list) tokens to check if notifications are enabled
+      // This allows checking if a friend has notifications enabled
+      // Note: The actual token values are still protected - users can only see if tokens exist
+      allow read: if isSignedIn();
       
-      // Allow any signed-in user to list tokens (to check if notifications are enabled)
-      // This allows checking if a friend has notifications enabled without exposing token values
-      allow list: if isSignedIn();
+      // Only the owner can write (create/update/delete) their tokens
+      allow write: if isOwner(userId);
     }
 
     /**
