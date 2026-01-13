@@ -120,11 +120,10 @@ async function initializeFirebase() {
             console.log('Firebase Messaging service worker already registered:', registration);
           }
           
-          // Initialize messaging with the service worker registration
-          // This ensures Firebase Messaging knows which service worker to use
-          messaging = getMessaging(firebaseApp, {
-            serviceWorkerRegistration: registration,
-          });
+          // Initialize messaging
+          // Note: getMessaging() doesn't take serviceWorkerRegistration as a parameter
+          // The service worker registration is handled automatically when registered
+          messaging = getMessaging(firebaseApp);
         } else {
           console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
         }
@@ -164,11 +163,10 @@ async function initializeFirebase() {
           console.log('Firebase Messaging service worker already registered:', registration);
         }
         
-        // Initialize messaging with the service worker registration
-        // This ensures Firebase Messaging knows which service worker to use
-        messaging = getMessaging(app, {
-          serviceWorkerRegistration: registration,
-        });
+        // Initialize messaging
+        // Note: getMessaging() doesn't take serviceWorkerRegistration as a parameter
+        // The service worker registration is handled automatically when registered
+        messaging = getMessaging(app);
       } else {
         console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
       }
