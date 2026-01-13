@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useMemo, type ReactNode } from 'react';
+import React, { useState, useEffect, type ReactNode } from 'react';
 import { FirebaseProvider } from '@/firebase/provider';
 // Import initializeFirebase directly to avoid circular dependency issues
 // We can't import from '@/firebase' because that would create a circular dependency
@@ -12,7 +12,7 @@ import { getFirestore } from 'firebase/firestore';
 import { getMessaging } from 'firebase/messaging';
 
 // Local copy of initializeFirebase to avoid circular dependency
-function initializeFirebase() {
+async function initializeFirebase() {
   // Only initialize in browser environment - return null during SSR/build
   if (typeof window === 'undefined') {
     return {
@@ -106,18 +106,25 @@ function initializeFirebase() {
       try {
         // Check if service workers are available before initializing messaging
         if ('serviceWorker' in navigator && navigator.serviceWorker !== undefined) {
-          // Register Firebase Messaging service worker (async, but we don't wait for it)
-          // Firebase Messaging will automatically use it once registered
-          navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-            scope: '/',
-          }).then((registration) => {
-            console.log('Firebase Messaging service worker registered:', registration);
-          }).catch((error) => {
-            console.warn('Failed to register Firebase Messaging service worker:', error);
-          });
+          // Try to get existing service worker registration first
+          const existingRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+          let registration = existingRegistration;
           
-          // Initialize messaging - it will automatically use the service worker once registered
-          messaging = getMessaging(firebaseApp);
+          // If no existing registration, register a new one
+          if (!registration) {
+            registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+              scope: '/',
+            });
+            console.log('Firebase Messaging service worker registered:', registration);
+          } else {
+            console.log('Firebase Messaging service worker already registered:', registration);
+          }
+          
+          // Initialize messaging with the service worker registration
+          // This ensures Firebase Messaging knows which service worker to use
+          messaging = getMessaging(firebaseApp, {
+            serviceWorkerRegistration: registration,
+          });
         } else {
           console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
         }
@@ -143,18 +150,25 @@ function initializeFirebase() {
     try {
       // Check if service workers are available before initializing messaging
       if ('serviceWorker' in navigator && navigator.serviceWorker !== undefined) {
-        // Register Firebase Messaging service worker (async, but we don't wait for it)
-        // Firebase Messaging will automatically use it once registered
-        navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/',
-        }).then((registration) => {
-          console.log('Firebase Messaging service worker registered:', registration);
-        }).catch((error) => {
-          console.warn('Failed to register Firebase Messaging service worker:', error);
-        });
+        // Try to get existing service worker registration first
+        const existingRegistration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+        let registration = existingRegistration;
         
-        // Initialize messaging - it will automatically use the service worker once registered
-        messaging = getMessaging(app);
+        // If no existing registration, register a new one
+        if (!registration) {
+          registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+            scope: '/',
+          });
+          console.log('Firebase Messaging service worker registered:', registration);
+        } else {
+          console.log('Firebase Messaging service worker already registered:', registration);
+        }
+        
+        // Initialize messaging with the service worker registration
+        // This ensures Firebase Messaging knows which service worker to use
+        messaging = getMessaging(app, {
+          serviceWorkerRegistration: registration,
+        });
       } else {
         console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
       }
@@ -207,7 +221,17 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
       });
       
       // Initialize Firebase on the client side, once per component mount.
-      return initializeFirebase();
+      // Note: initializeFirebase is async, but we can't await in useMemo
+      // So we'll initialize it and return a promise that resolves to the services
+      return initializeFirebase().catch((error) => {
+        console.error('Failed to initialize Firebase:', error);
+        return {
+          firebaseApp: null,
+          auth: null,
+          firestore: null,
+          messaging: null,
+        };
+      });
     } catch (error) {
       // Log error but don't crash the app
       console.error('Failed to initialize Firebase:', error);
