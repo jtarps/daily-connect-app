@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { VAPID_KEY } from '@/firebase/config';
 import { Button } from '../ui/button';
 import { X } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 export function NotificationManager() {
   const { user } = useUser();
@@ -38,6 +39,14 @@ export function NotificationManager() {
   useEffect(() => {
     const handleTokenRegistration = async () => {
       if (!messaging || !user || !firestore) return;
+      
+      // Check if we're in a native Capacitor app - web push doesn't work there
+      const isNative = Capacitor.isNativePlatform();
+      if (isNative) {
+        setNotificationPermission('unsupported');
+        return;
+      }
+      
       if (typeof window === 'undefined' || !('Notification' in window)) {
         setNotificationPermission('unsupported');
         return;
@@ -85,10 +94,21 @@ export function NotificationManager() {
     
     console.log('requestPermission called', { messaging: !!messaging, user: !!user, firestore: !!firestore });
     
+    // Check if we're in a native Capacitor app
+    const isNative = Capacitor.isNativePlatform();
+    if (isNative) {
+      toast({
+        title: 'Native App Detected',
+        description: 'Web push notifications don\'t work in native apps. Use the browser or PWA version to enable notifications, or we can add native push notifications later.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     if (typeof window === 'undefined' || !('Notification' in window)) {
       toast({
         title: 'Not Supported',
-        description: 'Notifications are not supported in this environment.',
+        description: 'Notifications are not supported in this environment. Try using a browser or PWA version.',
         variant: 'destructive',
       });
       return;
@@ -168,6 +188,12 @@ export function NotificationManager() {
 
   // Don't show notification prompt if user is not logged in
   if (!user) {
+    return null;
+  }
+
+  // Don't show prompt in native apps - web push doesn't work there
+  const isNative = Capacitor.isNativePlatform();
+  if (isNative) {
     return null;
   }
 

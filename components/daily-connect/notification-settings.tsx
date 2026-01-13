@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Bell, BellOff, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Badge } from '../ui/badge';
+import { Capacitor } from '@capacitor/core';
 
 interface NotificationSettingsProps {
   open: boolean;
@@ -38,6 +39,14 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
       if (!user || !firestore) return;
 
       setIsChecking(true);
+
+      // Check if we're in a native Capacitor app
+      const isNative = Capacitor.isNativePlatform();
+      if (isNative) {
+        setNotificationPermission('unsupported');
+        setIsChecking(false);
+        return;
+      }
 
       // Check browser notification permission
       if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -83,10 +92,21 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
   }, [messaging, toast]);
 
   const requestPermission = async () => {
+    // Check if we're in a native Capacitor app
+    const isNative = Capacitor.isNativePlatform();
+    if (isNative) {
+      toast({
+        title: 'Native App Detected',
+        description: 'Web push notifications don\'t work in native apps. Use the browser or PWA version to enable notifications, or we can add native push notifications later.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (typeof window === 'undefined' || !('Notification' in window) || !messaging || !user || !firestore) {
       toast({
         title: 'Not Supported',
-        description: 'Notifications are not supported in this environment.',
+        description: 'Notifications are not supported in this environment. Try using a browser or PWA version.',
         variant: 'destructive',
       });
       return;
@@ -214,10 +234,11 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
     }
 
     if (notificationPermission === 'unsupported') {
+      const isNative = Capacitor.isNativePlatform();
       return (
         <Badge variant="secondary">
           <AlertCircle className="h-3 w-3 mr-1" />
-          Not Supported
+          {isNative ? 'Native App' : 'Not Supported'}
         </Badge>
       );
     }
@@ -254,7 +275,9 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
                   : notificationPermission === 'denied'
                   ? 'Notifications are blocked. Enable them in your browser settings.'
                   : notificationPermission === 'unsupported'
-                  ? 'Push notifications are not supported in this environment.'
+                  ? Capacitor.isNativePlatform()
+                    ? 'Web push notifications don\'t work in native apps. Use the browser or PWA version to enable notifications.'
+                    : 'Push notifications are not supported in this environment.'
                   : 'Enable notifications to receive reminders and alerts.'}
               </p>
             </div>
