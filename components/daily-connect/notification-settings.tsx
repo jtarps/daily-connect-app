@@ -103,10 +103,29 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
       return;
     }
 
-    if (typeof window === 'undefined' || !('Notification' in window) || !messaging || !user || !firestore) {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
       toast({
         title: 'Not Supported',
         description: 'Notifications are not supported in this environment. Try using a browser or PWA version.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!messaging) {
+      console.error('Firebase Messaging is not initialized');
+      toast({
+        title: 'Error',
+        description: 'Firebase Messaging is not available. The service worker may not be registered. Check the browser console for details.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!user || !firestore) {
+      toast({
+        title: 'Error',
+        description: 'Firebase services are not ready. Please refresh the page.',
         variant: 'destructive',
       });
       return;
@@ -119,9 +138,22 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
 
       if (permission === 'granted') {
         try {
+          // Check if VAPID key is set
+          if (!VAPID_KEY || VAPID_KEY === 'YOUR_VAPID_KEY_HERE') {
+            console.error('VAPID_KEY is not set or is placeholder');
+            toast({
+              title: 'Configuration Error',
+              description: 'VAPID key is not configured. Please check your environment variables.',
+              variant: 'destructive',
+            });
+            return;
+          }
+
+          console.log('Requesting FCM token with VAPID key:', VAPID_KEY.substring(0, 20) + '...');
           const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+          
           if (currentToken) {
-            console.log('FCM Token:', currentToken);
+            console.log('FCM Token received:', currentToken);
             // Save the token to Firestore
             const tokenRef = doc(firestore, 'users', user.uid, 'fcmTokens', currentToken);
             await setDoc(tokenRef, {
@@ -146,17 +178,37 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
               description: 'You\'ll now receive reminders and alerts from your circle.',
             });
           } else {
+            console.error('getToken returned null or empty string');
             toast({
               title: 'Error',
-              description: 'Failed to get notification token. Please try again.',
+              description: 'Failed to get notification token. The service worker may not be registered. Check the browser console for details.',
               variant: 'destructive',
             });
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('Error getting token:', err);
+          const errorMessage = err?.message || 'Unknown error';
+          console.error('Error details:', {
+            code: err?.code,
+            message: errorMessage,
+            stack: err?.stack,
+          });
+          
+          // Provide more specific error messages
+          let userMessage = 'Failed to enable notifications. ';
+          if (errorMessage.includes('messaging/unsupported-browser')) {
+            userMessage += 'Your browser does not support push notifications.';
+          } else if (errorMessage.includes('messaging/invalid-vapid-key')) {
+            userMessage += 'Invalid VAPID key. Please check your environment variables.';
+          } else if (errorMessage.includes('messaging/token-subscription-failed')) {
+            userMessage += 'Failed to subscribe to notifications. The service worker may not be registered.';
+          } else {
+            userMessage += `Error: ${errorMessage}`;
+          }
+          
           toast({
             title: 'Error',
-            description: 'Failed to enable notifications. Please try again.',
+            description: userMessage,
             variant: 'destructive',
           });
         }
