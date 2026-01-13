@@ -189,58 +189,60 @@ interface FirebaseClientProviderProps {
 }
 
 export function FirebaseClientProvider({ children }: FirebaseClientProviderProps) {
-  const firebaseServices = useMemo(() => {
-    // During SSR/build, return null services - Firebase will initialize on client side
+  const [firebaseServices, setFirebaseServices] = useState<{
+    firebaseApp: FirebaseApp | null;
+    auth: any;
+    firestore: any;
+    messaging: any;
+  }>({
+    firebaseApp: null,
+    auth: null,
+    firestore: null,
+    messaging: null,
+  });
+
+  useEffect(() => {
+    // During SSR/build, don't initialize
     if (typeof window === 'undefined') {
-      return {
-        firebaseApp: null,
-        auth: null,
-        firestore: null,
-        messaging: null,
-      };
+      return;
     }
 
-    try {
-      // Debug: Log environment variable presence (without exposing values)
-      const envVars = {
-        hasProjectId: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-        hasAppId: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-        hasApiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-        hasAuthDomain: !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-        hasMessagingSenderId: !!process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-      };
-      console.log('Firebase env vars check:', envVars);
-      console.log('Firebase config values:', {
-        projectId: firebaseConfig.projectId ? `${firebaseConfig.projectId.substring(0, 10)}...` : 'MISSING',
-        appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 10)}...` : 'MISSING',
-        apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'MISSING',
-        authDomain: firebaseConfig.authDomain ? `${firebaseConfig.authDomain.substring(0, 20)}...` : 'MISSING',
-        messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING',
-      });
-      
-      // Initialize Firebase on the client side, once per component mount.
-      // Note: initializeFirebase is async, but we can't await in useMemo
-      // So we'll initialize it and return a promise that resolves to the services
-      return initializeFirebase().catch((error) => {
+    const initFirebase = async () => {
+      try {
+        // Debug: Log environment variable presence (without exposing values)
+        const envVars = {
+          hasProjectId: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+          hasAppId: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+          hasApiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+          hasAuthDomain: !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+          hasMessagingSenderId: !!process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+        };
+        console.log('Firebase env vars check:', envVars);
+        console.log('Firebase config values:', {
+          projectId: firebaseConfig.projectId ? `${firebaseConfig.projectId.substring(0, 10)}...` : 'MISSING',
+          appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 10)}...` : 'MISSING',
+          apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'MISSING',
+          authDomain: firebaseConfig.authDomain ? `${firebaseConfig.authDomain.substring(0, 20)}...` : 'MISSING',
+          messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING',
+        });
+        
+        // Initialize Firebase on the client side
+        const services = await initializeFirebase();
+        setFirebaseServices(services);
+      } catch (error) {
+        // Log error but don't crash the app
         console.error('Failed to initialize Firebase:', error);
-        return {
+        // Set null services - components should handle this gracefully
+        setFirebaseServices({
           firebaseApp: null,
           auth: null,
           firestore: null,
           messaging: null,
-        };
-      });
-    } catch (error) {
-      // Log error but don't crash the app
-      console.error('Failed to initialize Firebase:', error);
-      // Return null services - components should handle this gracefully
-      return {
-        firebaseApp: null,
-        auth: null,
-        firestore: null,
-        messaging: null,
-      };
-    }
+        });
+      }
+    };
+
+    initFirebase();
   }, []); // Empty dependency array ensures this runs only once on mount
 
   return (
