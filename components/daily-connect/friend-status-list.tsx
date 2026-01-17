@@ -5,7 +5,8 @@ import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUser } from "@/firebase/provider";
 import { useUserCircles } from "@/hooks/use-circles";
-import { Loader, Plus, Search } from "lucide-react";
+import { Loader, Plus, Search, Users } from "lucide-react";
+import { Skeleton } from "../ui/skeleton";
 import { CircleManagerDialog } from "./create-circle-dialog";
 import { Button } from "../ui/button";
 import { CircleCard } from "./circle-card";
@@ -44,18 +45,42 @@ const FriendStatusList = () => {
     const renderContent = () => {
         if (isLoadingCircles) {
             return (
-                <div className="flex justify-center items-center h-24">
-                    <Loader className="animate-spin text-primary" />
+                <div className="space-y-4">
+                    {[1, 2].map((i) => (
+                        <div key={i} className="border rounded-lg p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <Skeleton className="h-6 w-32" />
+                                <div className="flex gap-2">
+                                    <Skeleton className="h-8 w-8 rounded" />
+                                    <Skeleton className="h-8 w-8 rounded" />
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <Skeleton className="h-20 w-full rounded" />
+                                <Skeleton className="h-20 w-full rounded" />
+                            </div>
+                        </div>
+                    ))}
                 </div>
             );
         }
         
         if (!circles || circles.length === 0) {
             return (
-                <div className="text-center text-muted-foreground space-y-4 p-8 border-2 border-dashed rounded-lg">
-                    <p>You haven&apos;t created or joined a circle yet.</p>
+                <div className="text-center space-y-4 p-12 border-2 border-dashed rounded-lg bg-muted/30">
+                    <div className="flex justify-center">
+                        <div className="bg-primary/10 p-4 rounded-full">
+                            <Users className="h-12 w-12 text-primary/60" />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <h3 className="text-lg font-semibold">No circles yet</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                            Create your first circle to start connecting with your loved ones and checking in daily.
+                        </p>
+                    </div>
                     <CircleManagerDialog mode="create">
-                        <Button>
+                        <Button className="mt-4">
                             <Plus className="mr-2 h-4 w-4"/>
                             Create Your First Circle
                         </Button>

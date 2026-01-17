@@ -14,6 +14,7 @@ import type { User, CheckIn } from "@/lib/data";
 import { sendReminder } from "@/app/actions";
 import { useState } from "react";
 import { Badge } from "../ui/badge";
+import { Skeleton } from "../ui/skeleton";
 
 
 interface FriendStatusCardProps {
@@ -105,17 +106,25 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
 
   if (isLoading) {
       return (
-          <div className="flex items-center gap-4 rounded-lg border p-4 transition-all">
-              <Loader className="h-5 w-5 animate-spin" />
-              <p className="text-sm text-muted-foreground">Loading member status...</p>
+          <div className="flex items-start gap-3 rounded-lg border p-3 sm:p-4">
+              <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 rounded-full shrink-0" />
+              <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-8 w-16 shrink-0" />
           </div>
       );
   }
 
   if (!friend) {
       return (
-        <div className="flex items-center gap-4 rounded-lg border border-dashed p-4">
-            <p className="text-sm text-muted-foreground">Could not load friend data for ID: {userId}</p>
+        <div className="flex items-center gap-4 rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+            <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+            <div className="flex-1">
+                <p className="text-sm font-medium text-destructive">Could not load member</p>
+                <p className="text-xs text-muted-foreground mt-1">Unable to load data for this member. Please try refreshing.</p>
+            </div>
         </div>
       );
   }

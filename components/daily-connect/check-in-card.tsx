@@ -18,6 +18,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { NotOkayAlert } from "./not-okay-alert";
+import { Skeleton } from "../ui/skeleton";
 import { useShake } from "@/hooks/use-shake";
 import { useToast } from "@/hooks/use-toast";
 import { isToday, format, differenceInCalendarDays } from "date-fns";
@@ -236,12 +237,29 @@ const CheckInCard = () => {
         errorMessage.includes("wait") ||
         errorMessage.includes("recently");
 
-      toast({
+      // Store error for display with retry button
+      const errorState = {
         title: isIntervalRestriction ? "Already Checked In" : "Check-in Failed",
-        description: isIntervalRestriction
+        message: isIntervalRestriction
           ? errorMessage
           : "Could not save your check-in. Please try again.",
+        canRetry: !isIntervalRestriction,
+      };
+
+      toast({
+        title: errorState.title,
+        description: errorState.message,
         variant: "destructive",
+        action: errorState.canRetry ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => performCheckIn()}
+            className="ml-2"
+          >
+            Retry
+          </Button>
+        ) : undefined,
       });
     }
   }, [user, firestore, toast]);
@@ -340,9 +358,13 @@ const CheckInCard = () => {
   const renderContent = () => {
     if (isUserLoading || isCheckInLoading) {
       return (
-        <div className="text-center flex flex-col items-center gap-4">
-          <Loader className="h-16 w-16 text-primary animate-spin" />
-          <p className="text-muted-foreground">Loading your status...</p>
+        <div className="space-y-4 w-full">
+          <div className="flex flex-col items-center gap-3">
+            <Skeleton className="h-16 w-16 rounded-full" />
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <Skeleton className="h-12 w-full rounded-lg" />
         </div>
       );
     }
@@ -355,7 +377,10 @@ const CheckInCard = () => {
       );
       return (
         <div className="text-center flex flex-col items-center gap-4 animate-in fade-in zoom-in-95">
-          <CheckCircle className="h-16 w-16 text-green-500" />
+          <div className="relative">
+            <CheckCircle className="h-16 w-16 text-green-500 animate-in zoom-in duration-300" />
+            <div className="absolute inset-0 rounded-full bg-green-500/20 animate-ping" />
+          </div>
           <div className="space-y-1">
             <p className="font-semibold text-lg">You&apos;re checked in!</p>
             <p className="text-muted-foreground text-sm">

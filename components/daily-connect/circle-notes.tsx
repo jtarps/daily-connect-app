@@ -139,8 +139,11 @@ export function CircleNotes({ circle }: CircleNotesProps) {
               ))
             ) : (
               <div className="text-center py-8 text-muted-foreground text-sm">
-                <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>No notes yet. Be the first to leave a message!</p>
+                <div className="bg-muted/50 p-4 rounded-full w-fit mx-auto mb-3">
+                  <MessageSquare className="h-8 w-8 opacity-50" />
+                </div>
+                <p className="font-medium mb-1">No notes yet</p>
+                <p className="text-xs">Be the first to leave a message for your circle!</p>
               </div>
             )}
           </div>
