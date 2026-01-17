@@ -200,14 +200,20 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
     firestore: null,
     messaging: null,
   });
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [initError, setInitError] = useState<Error | null>(null);
 
   useEffect(() => {
     // During SSR/build, don't initialize
     if (typeof window === 'undefined') {
+      setIsInitializing(false);
       return;
     }
 
     const initFirebase = async () => {
+      setIsInitializing(true);
+      setInitError(null);
+      
       try {
         // Debug: Log environment variable presence (without exposing values)
         const envVars = {
@@ -229,9 +235,12 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
         // Initialize Firebase on the client side
         const services = await initializeFirebase();
         setFirebaseServices(services);
+        setIsInitializing(false);
       } catch (error) {
-        // Log error but don't crash the app
+        // Log error and store it
         console.error('Failed to initialize Firebase:', error);
+        const firebaseError = error instanceof Error ? error : new Error(String(error));
+        setInitError(firebaseError);
         // Set null services - components should handle this gracefully
         setFirebaseServices({
           firebaseApp: null,
@@ -239,11 +248,47 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
           firestore: null,
           messaging: null,
         });
+        setIsInitializing(false);
       }
     };
 
     initFirebase();
   }, []); // Empty dependency array ensures this runs only once on mount
+
+  // Show loading state during initialization
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-sm text-muted-foreground">Initializing Firebase...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if initialization failed
+  if (initError) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const errorMessage = isProduction
+      ? 'Firebase core services not available. This usually means Firebase environment variables are missing in Vercel. Please check your Vercel project settings (Settings → Environment Variables) and ensure all NEXT_PUBLIC_FIREBASE_* variables are set: NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID, NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID.'
+      : 'Firebase core services not available. Check FirebaseProvider props and ensure all NEXT_PUBLIC_FIREBASE_* environment variables are set in your .env.local file.';
+    
+    return (
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="max-w-md w-full bg-card border border-destructive rounded-lg p-6 text-center">
+          <h2 className="text-xl font-semibold text-destructive mb-4">Something went wrong</h2>
+          <p className="text-sm text-muted-foreground mb-4">{errorMessage}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <FirebaseProvider
