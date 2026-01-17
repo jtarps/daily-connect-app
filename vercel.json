@@ -4,11 +4,15 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["iad1"],
-  "crons": [
-    {
-      "path": "/api/cron/reminders",
-      "schedule": "0 9 * * *"
-    }
-  ]
+        "crons": [
+          {
+            "path": "/api/cron/reminders",
+            "schedule": "0 9 * * *"
+          },
+          {
+            "path": "/api/cron/emergency-alerts",
+            "schedule": "0 10 * * *"
+          }
+        ]
 }
 

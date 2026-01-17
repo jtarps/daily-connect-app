@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import * as admin from 'firebase-admin';
+import { differenceInDays } from 'date-fns';
 
 // Initialize Firebase Admin SDK only if it hasn't been initialized yet.
 if (!admin.apps.length) {
@@ -679,6 +680,192 @@ export async function sendInvitationWhatsApp(input: SendInvitationWhatsAppInput)
         return {
             success: false,
             message: 'There was an error sending the invitation WhatsApp.',
+        };
+    }
+}
+
+const SendEmergencyAlertInputSchema = z.object({
+  userId: z.string().describe('The user ID who hasn\'t checked in for 2+ days.'),
+  userName: z.string().describe('The name of the user.'),
+  daysSinceLastCheckIn: z.number().describe('Number of days since last check-in.'),
+});
+type SendEmergencyAlertInput = z.infer<typeof SendEmergencyAlertInputSchema>;
+
+/**
+ * Send emergency alerts for users who haven't checked in for 2+ days
+ * Notifies circle members (push) and emergency contact (email/SMS)
+ */
+export async function sendEmergencyAlert(input: SendEmergencyAlertInput) {
+    const db = admin.firestore();
+    const messaging = admin.messaging();
+
+    const validation = SendEmergencyAlertInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.', notified: 0, emergencyContactNotified: false };
+    }
+
+    const { userId, userName, daysSinceLastCheckIn } = validation.data;
+
+    try {
+        // 1. Get user data
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (!userDoc.exists) {
+            return { success: false, message: 'User not found.', notified: 0, emergencyContactNotified: false };
+        }
+
+        const userData = userDoc.data();
+        const emergencyContact = userData?.emergencyContact;
+        const emergencyAlertEnabled = userData?.emergencyAlertEnabled;
+
+        if (!emergencyAlertEnabled || !emergencyContact) {
+            return { success: false, message: 'Emergency alerts not enabled or contact not set.', notified: 0, emergencyContactNotified: false };
+        }
+
+        let circleNotified = 0;
+        let emergencyContactNotified = false;
+
+        // 2. Notify circle members (push notifications)
+        const circlesSnapshot = await db
+            .collection('circles')
+            .where('memberIds', 'array-contains', userId)
+            .get();
+
+        if (!circlesSnapshot.empty) {
+            const allTokens: string[] = [];
+            const memberIdsSet = new Set<string>();
+
+            for (const circleDoc of circlesSnapshot.docs) {
+                const circleData = circleDoc.data();
+                const memberIds = circleData.memberIds || [];
+                
+                // Get all other members (excluding the user)
+                const otherMembers = memberIds.filter((id: string) => id !== userId);
+                
+                for (const memberId of otherMembers) {
+                    if (memberIdsSet.has(memberId)) continue;
+                    memberIdsSet.add(memberId);
+
+                    // Get FCM tokens for this member
+                    const tokensSnapshot = await db
+                        .collection('users')
+                        .doc(memberId)
+                        .collection('fcmTokens')
+                        .get();
+
+                    tokensSnapshot.docs.forEach(tokenDoc => {
+                        allTokens.push(tokenDoc.id);
+                    });
+                }
+            }
+
+            if (allTokens.length > 0) {
+                const message = {
+                    notification: {
+                        title: `⚠️ ${userName} hasn't checked in for ${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}`,
+                        body: `${userName} hasn't checked in since ${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''} ago. Please check on them.`,
+                    },
+                    webpush: {
+                        fcmOptions: {
+                            link: '/circle',
+                        },
+                        notification: {
+                            icon: '/icon-192.png',
+                        }
+                    },
+                    tokens: allTokens,
+                };
+
+                const response = await messaging.sendEachForMulticast(message);
+                circleNotified = response.successCount;
+            }
+        }
+
+        // 3. Notify emergency contact (email/SMS)
+        if (emergencyContact.email || emergencyContact.phoneNumber) {
+            const contactName = emergencyContact.name || 'Emergency Contact';
+            const relationship = emergencyContact.relationship ? ` (${emergencyContact.relationship})` : '';
+
+            // Send email if available
+            if (emergencyContact.email) {
+                const emailServiceUrl = process.env.EMAIL_SERVICE_URL;
+                const emailApiKey = process.env.EMAIL_API_KEY;
+                
+                if (emailServiceUrl && emailApiKey) {
+                    try {
+                        await fetch(emailServiceUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${emailApiKey}`,
+                            },
+                            body: JSON.stringify({
+                                to: emergencyContact.email,
+                                subject: `⚠️ Emergency Alert: ${userName} hasn't checked in for ${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}`,
+                                html: `
+                                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                                        <h2 style="color: #dc2626;">⚠️ Emergency Alert</h2>
+                                        <p>Hello ${contactName},</p>
+                                        <p><strong>${userName}${relationship}</strong> hasn't checked in on Daily Connect for <strong>${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}</strong>.</p>
+                                        <p>This is an automated alert. Please check on them to make sure they're okay.</p>
+                                        <p style="margin-top: 30px; color: #666; font-size: 12px;">
+                                            This alert was sent because ${userName} has you set as their emergency contact and hasn't checked in for 2+ days.
+                                        </p>
+                                    </div>
+                                `,
+                                text: `Emergency Alert: ${userName}${relationship} hasn't checked in for ${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}. Please check on them.`,
+                            }),
+                        });
+                        emergencyContactNotified = true;
+                    } catch (error) {
+                        console.error('Failed to send emergency email:', error);
+                    }
+                }
+            }
+
+            // Send SMS if available (and email wasn't sent or failed)
+            if (emergencyContact.phoneNumber && !emergencyContactNotified) {
+                const smsServiceUrl = process.env.SMS_SERVICE_URL;
+                const smsApiKey = process.env.SMS_API_KEY;
+                
+                if (smsServiceUrl && smsApiKey) {
+                    try {
+                        const formattedPhone = emergencyContact.phoneNumber.startsWith('+') 
+                            ? emergencyContact.phoneNumber.replace(/\s/g, '') 
+                            : `+${emergencyContact.phoneNumber.replace(/\s/g, '')}`;
+                        
+                        await fetch(smsServiceUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${smsApiKey}`,
+                            },
+                            body: JSON.stringify({
+                                to: formattedPhone,
+                                message: `⚠️ Emergency Alert: ${userName}${relationship} hasn't checked in for ${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}. Please check on them.`,
+                            }),
+                        });
+                        emergencyContactNotified = true;
+                    } catch (error) {
+                        console.error('Failed to send emergency SMS:', error);
+                    }
+                }
+            }
+        }
+
+        return {
+            success: true,
+            message: `Emergency alerts sent. ${circleNotified} circle member(s) notified, emergency contact ${emergencyContactNotified ? 'notified' : 'notification failed'}.`,
+            notified: circleNotified,
+            emergencyContactNotified,
+        };
+
+    } catch (error) {
+        console.error('Error sending emergency alert:', error);
+        return {
+            success: false,
+            message: 'There was an error sending emergency alerts.',
+            notified: 0,
+            emergencyContactNotified: false,
         };
     }
 }

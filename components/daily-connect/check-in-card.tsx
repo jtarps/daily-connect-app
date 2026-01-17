@@ -16,9 +16,6 @@ import {
   Loader,
   Hand,
   Undo2,
-  Flame,
-  Calendar,
-  TrendingUp,
 } from "lucide-react";
 import { useShake } from "@/hooks/use-shake";
 import { useToast } from "@/hooks/use-toast";
@@ -46,15 +43,13 @@ import {
   isWithinInterval,
 } from "@/lib/check-in-intervals";
 import { notifyCircleOnCheckIn } from "@/app/actions";
-import { calculateCheckInStats } from "@/lib/check-in-stats";
 
 const CheckInCard = () => {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
 
-  // Query for latest check-in
-  const latestCheckInQuery = useMemoFirebase(() => {
+  const checkInsQuery = useMemoFirebase(() => {
     if (!user || !firestore) return null;
     return query(
       collection(firestore, "users", user.uid, "checkIns"),
@@ -63,21 +58,9 @@ const CheckInCard = () => {
     );
   }, [firestore, user]);
 
-  // Query for all check-ins (for stats)
-  const allCheckInsQuery = useMemoFirebase(() => {
-    if (!user || !firestore) return null;
-    return query(
-      collection(firestore, "users", user.uid, "checkIns"),
-      orderBy("timestamp", "desc")
-    );
-  }, [firestore, user]);
-
   const { data: latestCheckIns, isLoading: isCheckInLoading } =
-    useCollection(latestCheckInQuery);
+    useCollection(checkInsQuery);
   const latestCheckIn = latestCheckIns?.[0];
-
-  const { data: allCheckIns, isLoading: isAllCheckInsLoading } =
-    useCollection(allCheckInsQuery);
 
   // Get user document to access check-in interval
   const userDocRef = useMemoFirebase(() => {
@@ -349,8 +332,6 @@ const CheckInCard = () => {
     }
   }, [user, firestore, latestCheckIn, toast]);
 
-  // Calculate stats
-  const stats = allCheckIns ? calculateCheckInStats(allCheckIns, userData?.streak) : null;
   const displayName = userData 
     ? `${userData.firstName}${userData.lastName ? ` ${userData.lastName.substring(0, 1)}.` : ''}`
     : 'Friend';
@@ -465,60 +446,22 @@ const CheckInCard = () => {
   };
 
   return (
-    <div className="space-y-4">
-      <Card
-        className={cn(
-          "transition-all duration-500",
-          isListening && !hasCheckedInRecently && "shadow-lg shadow-primary/20"
-        )}
-      >
-        <CardHeader>
-          <CardTitle>Daily Check-in</CardTitle>
-          <CardDescription>
-            Welcome back, {displayName}! Let your circle know you&apos;re okay.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-center min-h-[200px] p-6">
-          {renderContent()}
-        </CardContent>
-      </Card>
-
-      {/* Stats Card */}
-      {stats && !isAllCheckInsLoading && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Your Stats</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50">
-                <Flame className="h-6 w-6 text-orange-500 mb-2" />
-                <p className="text-2xl font-bold">{stats.currentStreak}</p>
-                <p className="text-xs text-muted-foreground text-center">Current Streak</p>
-              </div>
-              <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50">
-                <TrendingUp className="h-6 w-6 text-blue-500 mb-2" />
-                <p className="text-2xl font-bold">{stats.longestStreak}</p>
-                <p className="text-xs text-muted-foreground text-center">Longest Streak</p>
-              </div>
-              <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50 col-span-2 sm:col-span-1">
-                <Calendar className="h-6 w-6 text-green-500 mb-2" />
-                <p className="text-2xl font-bold">{stats.totalCheckIns}</p>
-                <p className="text-xs text-muted-foreground text-center">Total Check-ins</p>
-              </div>
-              <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50">
-                <p className="text-2xl font-bold">{stats.thisWeek}</p>
-                <p className="text-xs text-muted-foreground text-center">This Week</p>
-              </div>
-              <div className="flex flex-col items-center p-4 rounded-lg bg-muted/50">
-                <p className="text-2xl font-bold">{stats.thisMonth}</p>
-                <p className="text-xs text-muted-foreground text-center">This Month</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+    <Card
+      className={cn(
+        "h-full transition-all duration-500",
+        isListening && !hasCheckedInRecently && "shadow-lg shadow-primary/20"
       )}
-    </div>
+    >
+      <CardHeader>
+        <CardTitle>Daily Check-in</CardTitle>
+        <CardDescription>
+          Welcome back, {displayName}! Let your circle know you&apos;re okay.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex items-center justify-center min-h-[200px] p-6">
+        {renderContent()}
+      </CardContent>
+    </Card>
   );
 };
 
