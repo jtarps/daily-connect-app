@@ -28,7 +28,11 @@ import { Input } from '@/components/ui/input';
 import type { User, CheckInInterval } from '@/lib/data';
 import { CHECK_IN_INTERVALS, getDefaultInterval } from '@/lib/check-in-intervals';
 
-export function CheckInIntervalSettings() {
+interface CheckInIntervalSettingsProps {
+  children?: React.ReactNode;
+}
+
+export function CheckInIntervalSettings({ children }: CheckInIntervalSettingsProps = {}) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -140,9 +144,11 @@ export function CheckInIntervalSettings() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Check-in Settings">
-          <Settings className="h-5 w-5" />
-        </Button>
+        {children || (
+          <Button variant="ghost" size="icon" aria-label="Check-in Settings">
+            <Settings className="h-5 w-5" />
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
