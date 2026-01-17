@@ -91,21 +91,74 @@ export async function sendReminder(input: ReminderInput) {
 
         // 3. Send the message
         const response = await messaging.sendEachForMulticast(message);
-        console.log('Successfully sent message:', response);
+        console.log('FCM response:', {
+          successCount: response.successCount,
+          failureCount: response.failureCount,
+          responses: response.responses.map((r, idx) => ({
+            token: tokens[idx].substring(0, 20) + '...',
+            success: r.success,
+            error: r.error?.code || r.error?.message || null,
+          })),
+        });
+        
+        // Check if any notifications were successfully sent
+        if (response.successCount === 0) {
+          // All tokens failed
+          const errors = response.responses
+            .map((resp, idx) => {
+              if (!resp.success && resp.error) {
+                const errorCode = resp.error.code;
+                // Common error codes
+                if (errorCode === 'messaging/registration-token-not-registered') {
+                  return 'Notification token is invalid or expired';
+                } else if (errorCode === 'messaging/invalid-registration-token') {
+                  return 'Invalid notification token';
+                } else if (errorCode === 'messaging/invalid-argument') {
+                  return 'Invalid notification configuration';
+                }
+                return resp.error.message || 'Unknown error';
+              }
+              return null;
+            })
+            .filter(Boolean);
+          
+          return {
+            success: false,
+            message: `Failed to send reminder to ${recipientName}. ${errors[0] || 'Notification delivery failed. They may need to re-enable notifications.'}`,
+          };
+        }
         
         if (response.failureCount > 0) {
+          // Some succeeded, some failed
           const failedTokens: string[] = [];
+          const errors: string[] = [];
           response.responses.forEach((resp, idx) => {
             if (!resp.success) {
               failedTokens.push(tokens[idx]);
+              if (resp.error) {
+                const errorCode = resp.error.code;
+                if (errorCode === 'messaging/registration-token-not-registered') {
+                  errors.push('Some devices have invalid tokens');
+                } else {
+                  errors.push(resp.error.message || 'Unknown error');
+                }
+              }
             }
           });
-          console.log('List of tokens that caused failures: ' + failedTokens);
+          console.log('Some tokens failed:', failedTokens);
+          console.log('Errors:', errors);
+          
+          // Still return success if at least one notification was sent
+          return {
+            success: true,
+            message: `Reminder sent to ${recipientName} (${response.successCount} device(s) received it, ${response.failureCount} failed).`,
+          };
         }
         
+        // All notifications sent successfully
         return {
           success: true,
-          message: `A friendly reminder has been sent to ${recipientName}.`,
+          message: `Reminder sent to ${recipientName}! They should receive it on their device${response.successCount > 1 ? 's' : ''} shortly.`,
         };
 
     } catch (error) {
