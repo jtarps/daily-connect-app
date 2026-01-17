@@ -196,5 +196,42 @@ service cloud.firestore {
             ))
         );
     }
+
+    // Circle notes - members can read and write notes in their circles
+    match /circles/{circleId}/notes/{noteId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isCircleMember() {
+        let circle = get(/databases/$(database)/documents/circles/$(circleId)).data;
+        return isSignedIn() && request.auth.uid in circle.memberIds;
+      }
+
+      allow read: if isCircleMember();
+      allow list: if isCircleMember(); // Allow listing notes for circle members
+      allow create: if isCircleMember() && request.resource.data.authorId == request.auth.uid;
+      allow delete: if isCircleMember() && resource.data.authorId == request.auth.uid;
+    }
+
+    // Not okay alerts - users can create alerts, recipients can read
+    match /notOkayAlerts/{alertId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isAlertSender() {
+        return isSignedIn() && resource.data.userId == request.auth.uid;
+      }
+
+      function isAlertRecipient() {
+        return isSignedIn() && resource.data.recipientId == request.auth.uid;
+      }
+
+      allow read: if isSignedIn() && (isAlertSender() || isAlertRecipient());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && isAlertSender(); // User can mark their own alerts as resolved
+      allow delete: if isSignedIn() && isAlertSender();
+    }
   }
 }
