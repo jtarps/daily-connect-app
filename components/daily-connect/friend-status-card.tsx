@@ -110,60 +110,70 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
 
   const { text, needsAttention, status } = formatCheckInTime(lastCheckIn?.timestamp?.toDate());
 
+  // Format name: First name + last initial (e.g., "John D.")
+  const displayName = friend.lastName 
+    ? `${friend.firstName} ${friend.lastName.substring(0, 1)}.`
+    : friend.firstName;
+
   return (
     <div
       className={cn(
-        "flex items-center gap-4 rounded-lg border p-4 transition-all",
+        "flex items-start gap-3 rounded-lg border p-3 sm:p-4 transition-all",
         needsAttention && "border-accent bg-accent/10"
       )}
     >
-      <Avatar className="h-12 w-12 border-2 border-white">
-        <AvatarFallback className="bg-primary text-primary-foreground font-semibold">
-          {friend.firstName.substring(0, 1)}{friend.lastName.substring(0, 1)}
+      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-white shrink-0">
+        <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
+          {friend.firstName.substring(0, 1)}{friend.lastName?.substring(0, 1) || ''}
         </AvatarFallback>
       </Avatar>
-      <div className="flex-1">
-        <p className="font-semibold flex items-center gap-2 flex-wrap">
-            {friend.firstName} {friend.lastName}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2 mb-1 flex-wrap">
+          <p className="font-semibold text-sm sm:text-base truncate">
+            {displayName}
+          </p>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             {friend.streak && friend.streak > 1 && (
-                <span className="flex items-center gap-1 text-xs font-medium text-orange-500 bg-orange-100 px-2 py-0.5 rounded-full">
-                    <Flame className="h-3 w-3"/> {friend.streak}
-                </span>
+              <span className="flex items-center gap-1 text-xs font-medium text-orange-500 bg-orange-100 dark:bg-orange-900/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+                <Flame className="h-3 w-3"/> {friend.streak}
+              </span>
             )}
             {hasNotificationsEnabled ? (
-              <Badge variant="default" className="bg-green-500 text-xs">
+              <Badge variant="default" className="bg-green-500 text-xs whitespace-nowrap">
                 <Bell className="h-3 w-3 mr-1" />
                 Notifications
               </Badge>
             ) : (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs whitespace-nowrap">
                 <Bell className="h-3 w-3 mr-1 opacity-50" />
                 No Notifications
               </Badge>
             )}
-        </p>
+          </div>
+        </div>
         <p
           className={cn(
-            "text-sm",
-            status === 'ok' && "text-green-600",
-            status === 'away' && "text-yellow-600",
+            "text-xs sm:text-sm break-words",
+            status === 'ok' && "text-green-600 dark:text-green-400",
+            status === 'away' && "text-yellow-600 dark:text-yellow-400",
             status === 'inactive' && "text-accent-foreground"
           )}
         >
           {text}
         </p>
         {needsAttention && !hasNotificationsEnabled && (
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1 break-words">
             Reminders unavailable - {friend.firstName} hasn&apos;t enabled notifications
           </p>
         )}
       </div>
       {needsAttention && (
-        <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-accent hidden sm:block" />
-            <Button size="sm" variant="outline" onClick={handleSendReminder} disabled={isSending}>
-                {isSending ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : <Bell className="mr-2 h-4 w-4" />}
-                {isSending ? 'Sending...' : 'Remind'}
+        <div className="flex items-center gap-2 shrink-0">
+            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-accent hidden sm:block" />
+            <Button size="sm" variant="outline" onClick={handleSendReminder} disabled={isSending} className="text-xs sm:text-sm">
+                {isSending ? <Loader className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin"/> : <Bell className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />}
+                <span className="hidden sm:inline">{isSending ? 'Sending...' : 'Remind'}</span>
+                <span className="sm:hidden">{isSending ? '...' : 'Remind'}</span>
             </Button>
         </div>
       )}

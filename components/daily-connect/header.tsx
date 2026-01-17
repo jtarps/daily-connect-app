@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Users, Bell, Home, LogOut, Download } from 'lucide-react';
+import { Users, Bell, Home, LogOut, Download, Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
@@ -22,6 +22,7 @@ import { usePWAInstall } from './pwa-install-prompt';
 import { NotificationSettings } from './notification-settings';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { useTheme } from 'next-themes';
 
 const navItems = [
     { href: "/check-in", label: "Check-in", icon: Home },
@@ -36,6 +37,12 @@ const Header = () => {
   const { canInstall, handleInstall } = usePWAInstall();
   const [safeAreaTop, setSafeAreaTop] = useState(0);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const updateSafeArea = () => {
@@ -124,6 +131,21 @@ const Header = () => {
 
         <div className="flex items-center gap-2 sm:gap-4">
           <CheckInIntervalSettings />
+          {mounted && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              aria-label="Toggle theme"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
+            </Button>
+          )}
           {canInstall && (
             <Button 
               variant="ghost" 

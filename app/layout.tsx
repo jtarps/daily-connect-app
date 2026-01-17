@@ -7,6 +7,7 @@ import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { NotificationManager } from '@/components/daily-connect/notification-manager';
 import { PWAInstallPrompt } from '@/components/daily-connect/pwa-install-prompt';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { ThemeProvider } from '@/components/theme-provider';
 
 const ptSans = PT_Sans({
   weight: ['400', '700'],
@@ -49,16 +50,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="light">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${ptSans.variable} font-body antialiased`}>
-        <ErrorBoundary>
-          <FirebaseClientProvider>
-            {children}
-            <NotificationManager />
-            <PWAInstallPrompt />
-          </FirebaseClientProvider>
-        </ErrorBoundary>
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ErrorBoundary>
+            <FirebaseClientProvider>
+              {children}
+              <NotificationManager />
+              <PWAInstallPrompt />
+            </FirebaseClientProvider>
+          </ErrorBoundary>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
