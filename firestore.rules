@@ -205,7 +205,7 @@ service cloud.firestore {
 
       function isCircleMember() {
         let circle = get(/databases/$(database)/documents/circles/$(circleId)).data;
-        return isSignedIn() && request.auth.uid in circle.memberIds;
+        return isSignedIn() && circle.memberIds.hasAny([request.auth.uid]);
       }
 
       allow read: if isCircleMember();
