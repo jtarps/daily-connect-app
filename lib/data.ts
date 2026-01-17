@@ -48,3 +48,24 @@ export interface Invitation {
     status: 'pending';
     createdAt: Timestamp;
 }
+
+export interface CircleNote {
+    id: string;
+    circleId: string;
+    authorId: string;
+    authorName: string;
+    message: string;
+    createdAt: Timestamp;
+}
+
+export interface NotOkayAlert {
+    id: string;
+    userId: string;
+    userName: string;
+    circleId?: string; // If null, alert goes to all circles
+    recipientId?: string; // If set, alert goes to specific person instead of circle
+    message?: string; // Optional custom message
+    createdAt: Timestamp;
+    resolved?: boolean; // Mark as resolved when user checks in
+    resolvedAt?: Timestamp;
+}

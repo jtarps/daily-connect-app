@@ -17,6 +17,7 @@ import {
   Hand,
   Undo2,
 } from "lucide-react";
+import { NotOkayAlert } from "./not-okay-alert";
 import { useShake } from "@/hooks/use-shake";
 import { useToast } from "@/hooks/use-toast";
 import { isToday, format, differenceInCalendarDays } from "date-fns";
@@ -417,9 +418,12 @@ const CheckInCard = () => {
               </>
             )}
           </p>
-          <Button onClick={performCheckIn} size="lg" className="w-full">
-            <Hand className="mr-2" /> I&apos;m OK
-          </Button>
+          <div className="w-full space-y-2">
+            <Button onClick={performCheckIn} size="lg" className="w-full">
+              <Hand className="mr-2" /> I&apos;m OK
+            </Button>
+            <NotOkayAlert variant="subtle" className="w-full justify-center" />
+          </div>
         </div>
       );
     }
@@ -438,9 +442,12 @@ const CheckInCard = () => {
             Or tap the button below.
           </p>
         </div>
-        <Button onClick={performCheckIn} size="lg" className="w-full">
-          <Hand className="mr-2" /> I&apos;m OK
-        </Button>
+        <div className="w-full space-y-2">
+          <Button onClick={performCheckIn} size="lg" className="w-full">
+            <Hand className="mr-2" /> I&apos;m OK
+          </Button>
+          <NotOkayAlert variant="subtle" className="w-full justify-center" />
+        </div>
       </div>
     );
   };

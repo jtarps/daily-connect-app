@@ -869,3 +869,206 @@ export async function sendEmergencyAlert(input: SendEmergencyAlertInput) {
         };
     }
 }
+
+const SendNotOkayAlertInputSchema = z.object({
+  userId: z.string().describe('The user ID sending the alert.'),
+  userName: z.string().describe('The name of the user sending the alert.'),
+  circleId: z.string().optional().describe('Optional circle ID - alert goes to this circle.'),
+  recipientId: z.string().optional().describe('Optional recipient ID - alert goes to specific person instead of circle.'),
+  message: z.string().optional().describe('Optional custom message.'),
+});
+type SendNotOkayAlertInput = z.infer<typeof SendNotOkayAlertInputSchema>;
+
+/**
+ * Send "not okay" alert - user needs help
+ * Can send to circle members or specific person
+ */
+export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
+    const db = admin.firestore();
+    const messaging = admin.messaging();
+
+    const validation = SendNotOkayAlertInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.', notified: 0 };
+    }
+
+    const { userId, userName, circleId, recipientId, message } = validation.data;
+
+    try {
+        let notified = 0;
+        const alertMessage = message || `${userName} needs help. Please check on them.`;
+
+        // If recipientId is set, send to specific person
+        if (recipientId) {
+            const tokensSnapshot = await db
+                .collection('users')
+                .doc(recipientId)
+                .collection('fcmTokens')
+                .get();
+
+            if (!tokensSnapshot.empty) {
+                const tokens = tokensSnapshot.docs.map(doc => doc.id);
+                const fcmMessage = {
+                    notification: {
+                        title: `⚠️ ${userName} needs help`,
+                        body: alertMessage,
+                    },
+                    webpush: {
+                        fcmOptions: {
+                            link: '/circle',
+                        },
+                        notification: {
+                            icon: '/icon-192.png',
+                        }
+                    },
+                    tokens: tokens,
+                };
+
+                const response = await messaging.sendEachForMulticast(fcmMessage);
+                notified = response.successCount;
+
+                // Also save alert to Firestore for tracking
+                await db.collection('notOkayAlerts').add({
+                    userId,
+                    userName,
+                    recipientId,
+                    message: alertMessage,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    resolved: false,
+                });
+            }
+        } 
+        // If circleId is set, send to circle members
+        else if (circleId) {
+            const circleDoc = await db.collection('circles').doc(circleId).get();
+            if (!circleDoc.exists) {
+                return { success: false, message: 'Circle not found.', notified: 0 };
+            }
+
+            const circleData = circleDoc.data();
+            const memberIds = circleData?.memberIds || [];
+            const otherMemberIds = memberIds.filter((id: string) => id !== userId);
+
+            const allTokens: string[] = [];
+            for (const memberId of otherMemberIds) {
+                const tokensSnapshot = await db
+                    .collection('users')
+                    .doc(memberId)
+                    .collection('fcmTokens')
+                    .get();
+
+                tokensSnapshot.docs.forEach(tokenDoc => {
+                    allTokens.push(tokenDoc.id);
+                });
+            }
+
+            if (allTokens.length > 0) {
+                const fcmMessage = {
+                    notification: {
+                        title: `⚠️ ${userName} needs help`,
+                        body: alertMessage,
+                    },
+                    webpush: {
+                        fcmOptions: {
+                            link: '/circle',
+                        },
+                        notification: {
+                            icon: '/icon-192.png',
+                        }
+                    },
+                    tokens: allTokens,
+                };
+
+                const response = await messaging.sendEachForMulticast(fcmMessage);
+                notified = response.successCount;
+
+                // Save alert to Firestore
+                await db.collection('notOkayAlerts').add({
+                    userId,
+                    userName,
+                    circleId,
+                    message: alertMessage,
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    resolved: false,
+                });
+            }
+        } 
+        // Otherwise, send to all circles user belongs to
+        else {
+            const circlesSnapshot = await db
+                .collection('circles')
+                .where('memberIds', 'array-contains', userId)
+                .get();
+
+            if (!circlesSnapshot.empty) {
+                const allTokens: string[] = [];
+                const memberIdsSet = new Set<string>();
+
+                for (const circleDoc of circlesSnapshot.docs) {
+                    const circleData = circleDoc.data();
+                    const memberIds = circleData.memberIds || [];
+                    const otherMembers = memberIds.filter((id: string) => id !== userId);
+
+                    for (const memberId of otherMembers) {
+                        if (memberIdsSet.has(memberId)) continue;
+                        memberIdsSet.add(memberId);
+
+                        const tokensSnapshot = await db
+                            .collection('users')
+                            .doc(memberId)
+                            .collection('fcmTokens')
+                            .get();
+
+                        tokensSnapshot.docs.forEach(tokenDoc => {
+                            allTokens.push(tokenDoc.id);
+                        });
+                    }
+                }
+
+                if (allTokens.length > 0) {
+                    const fcmMessage = {
+                        notification: {
+                            title: `⚠️ ${userName} needs help`,
+                            body: alertMessage,
+                        },
+                        webpush: {
+                            fcmOptions: {
+                                link: '/circle',
+                            },
+                            notification: {
+                                icon: '/icon-192.png',
+                            }
+                        },
+                        tokens: allTokens,
+                    };
+
+                    const response = await messaging.sendEachForMulticast(fcmMessage);
+                    notified = response.successCount;
+
+                    // Save alert to Firestore
+                    await db.collection('notOkayAlerts').add({
+                        userId,
+                        userName,
+                        message: alertMessage,
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                        resolved: false,
+                    });
+                }
+            }
+        }
+
+        return {
+            success: true,
+            message: `Alert sent! ${notified} ${notified === 1 ? 'person' : 'people'} notified.`,
+            notified,
+        };
+
+    } catch (error) {
+        console.error('Error sending not okay alert:', error);
+        return {
+            success: false,
+            message: 'There was an error sending the alert.',
+            notified: 0,
+        };
+    }
+}

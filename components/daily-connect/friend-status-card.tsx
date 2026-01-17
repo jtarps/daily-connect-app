@@ -12,7 +12,6 @@ import { useCollection } from "@/firebase/firestore/use-collection";
 import { doc, collection, query, orderBy, limit, getDoc } from "firebase/firestore";
 import type { User, CheckIn } from "@/lib/data";
 import { sendReminder } from "@/app/actions";
-import { NotOkayAlert } from "./not-okay-alert";
 import { useState } from "react";
 import { Badge } from "../ui/badge";
 
@@ -183,12 +182,6 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
                 <span className="hidden sm:inline">{isSending ? 'Sending...' : 'Remind'}</span>
                 <span className="sm:hidden">{isSending ? '...' : 'Remind'}</span>
             </Button>
-            <NotOkayAlert 
-              recipientId={userId} 
-              recipientName={displayName}
-              variant="subtle"
-              className="text-xs"
-            />
         </div>
       )}
     </div>

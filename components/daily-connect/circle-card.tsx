@@ -5,6 +5,8 @@ import FriendStatusCard from "./friend-status-card";
 import { useUser, useFirestore } from "@/firebase/provider";
 import { Loader, Settings, Bell, UserPlus } from "lucide-react";
 import { CircleManagerDialog } from "./create-circle-dialog";
+import { CircleNotes } from "./circle-notes";
+import { CircleHelpAlert } from "./circle-help-alert";
 import { Button } from "../ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { sendRemindersToInactiveMembers } from "@/app/actions";
@@ -87,7 +89,7 @@ export function CircleCard({ circle }: CircleCardProps) {
     return (
       <div className="space-y-3">
         {otherMembers.map((userId) => (
-          <FriendStatusCard key={userId} userId={userId} />
+          <FriendStatusCard key={userId} userId={userId} circleId={circle.id} />
         ))}
       </div>
     );
@@ -103,6 +105,8 @@ export function CircleCard({ circle }: CircleCardProps) {
           </CardDescription>
         </div>
         <div className="flex items-center gap-2">
+          <CircleNotes circle={circle} />
+          <CircleHelpAlert circle={circle} />
           <Button 
             variant="ghost" 
             size="icon"
