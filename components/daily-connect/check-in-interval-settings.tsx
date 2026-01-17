@@ -25,8 +25,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Separator } from '@/components/ui/separator';
 import type { User, CheckInInterval } from '@/lib/data';
 import { CHECK_IN_INTERVALS, getDefaultInterval } from '@/lib/check-in-intervals';
+import { EmergencyContactSettings } from './emergency-contact-settings';
 
 interface CheckInIntervalSettingsProps {
   children?: React.ReactNode;
@@ -237,6 +239,20 @@ export function CheckInIntervalSettings({ children }: CheckInIntervalSettingsPro
               onCheckedChange={handleNotifyCircleChange}
               disabled={isSaving}
             />
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Emergency Contact</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Set up an emergency contact to be notified if you miss check-ins for 2+ days.
+            </p>
+            <EmergencyContactSettings>
+              <Button variant="outline" className="w-full" disabled={isSaving}>
+                Configure Emergency Contact
+              </Button>
+            </EmergencyContactSettings>
           </div>
         </div>
       </DialogContent>
