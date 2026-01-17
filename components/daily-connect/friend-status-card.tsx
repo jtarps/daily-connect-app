@@ -12,15 +12,17 @@ import { useCollection } from "@/firebase/firestore/use-collection";
 import { doc, collection, query, orderBy, limit, getDoc } from "firebase/firestore";
 import type { User, CheckIn } from "@/lib/data";
 import { sendReminder } from "@/app/actions";
+import { NotOkayAlert } from "./not-okay-alert";
 import { useState } from "react";
 import { Badge } from "../ui/badge";
 
 
 interface FriendStatusCardProps {
   userId: string;
+  circleId?: string; // Optional circle ID for context
 }
 
-const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
+const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user: currentUser } = useUser();
@@ -161,20 +163,21 @@ const FriendStatusCard = ({ userId }: FriendStatusCardProps) => {
         >
           {text}
         </p>
-        {needsAttention && !hasNotificationsEnabled && (
-          <p className="text-xs text-muted-foreground mt-1 break-words">
-            Reminders unavailable - {friend.firstName} hasn&apos;t enabled notifications
-          </p>
-        )}
       </div>
       {needsAttention && (
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-accent hidden sm:block" />
             <Button size="sm" variant="outline" onClick={handleSendReminder} disabled={isSending} className="text-xs sm:text-sm">
                 {isSending ? <Loader className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin"/> : <Bell className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />}
                 <span className="hidden sm:inline">{isSending ? 'Sending...' : 'Remind'}</span>
                 <span className="sm:hidden">{isSending ? '...' : 'Remind'}</span>
             </Button>
+            <NotOkayAlert 
+              recipientId={userId} 
+              recipientName={displayName}
+              variant="subtle"
+              className="text-xs"
+            />
         </div>
       )}
     </div>
