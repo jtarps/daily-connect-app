@@ -59,6 +59,17 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
 
   const handleSendReminder = async () => {
     if (!friend || !currentUser || !firestore) return;
+
+    // Check if notifications are enabled before attempting to send
+    if (!hasNotificationsEnabled) {
+      toast({
+        title: "Reminders unavailable",
+        description: `${friend.firstName} hasn't enabled notifications`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSending(true);
     try {
         // Get current user's name from Firestore
