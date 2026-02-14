@@ -129,7 +129,7 @@ export function PWAInstallPrompt() {
       <div className="bg-background border rounded-lg shadow-lg p-4">
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="text-sm font-medium">Install Daily Connect</p>
+            <p className="text-sm font-medium">Install FamShake</p>
             <p className="text-sm text-muted-foreground mt-1">
               Install this app on your device for a better experience.
             </p>

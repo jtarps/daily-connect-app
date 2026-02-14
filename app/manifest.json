@@ -1,6 +1,6 @@
 {
-  "name": "Daily Connect",
-  "short_name": "Daily Connect",
+  "name": "FamShake",
+  "short_name": "FamShake",
   "description": "Check in with your loved ones, daily.",
   "start_url": "/",
   "display": "standalone",

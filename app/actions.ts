@@ -4,6 +4,67 @@
 import { z } from 'zod';
 import * as admin from 'firebase-admin';
 import { differenceInDays } from 'date-fns';
+import { sendApnsPush, isApnsConfigured } from '@/lib/apns';
+
+// Token info type for dual FCM/APNs delivery
+interface TokenInfo {
+    id: string;
+    type?: string;
+}
+
+// Helper: extract token info from Firestore snapshot
+function getTokenInfos(tokensSnapshot: admin.firestore.QuerySnapshot): TokenInfo[] {
+    return tokensSnapshot.docs.map(doc => ({
+        id: doc.id,
+        type: doc.data().type,
+    }));
+}
+
+// Helper: send notification to both FCM (web) and APNs (native iOS) tokens
+async function sendMulticastNotification(
+    tokenInfos: TokenInfo[],
+    notification: { title: string; body: string },
+    link?: string,
+): Promise<{ successCount: number; failureCount: number }> {
+    const fcmTokens = tokenInfos.filter(t => t.type !== 'apns').map(t => t.id);
+    const apnsTokens = tokenInfos.filter(t => t.type === 'apns').map(t => t.id);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    // Send to web via FCM
+    if (fcmTokens.length > 0) {
+        const messaging = admin.messaging();
+        const resp = await messaging.sendEachForMulticast({
+            tokens: fcmTokens,
+            notification,
+            webpush: {
+                fcmOptions: { link: link || '/check-in' },
+                notification: { icon: '/icon-192.png' },
+            },
+        });
+        successCount += resp.successCount;
+        failureCount += resp.failureCount;
+    }
+
+    // Send to native iOS via APNs
+    if (apnsTokens.length > 0 && isApnsConfigured()) {
+        for (const token of apnsTokens) {
+            try {
+                const ok = await sendApnsPush(token, notification.title, notification.body);
+                if (ok) successCount++;
+                else failureCount++;
+            } catch {
+                failureCount++;
+            }
+        }
+    } else if (apnsTokens.length > 0) {
+        // APNs not configured - skip native tokens silently
+        failureCount += apnsTokens.length;
+    }
+
+    return { successCount, failureCount };
+}
 
 // Initialize Firebase Admin SDK only if it hasn't been initialized yet.
 if (!admin.apps.length) {
@@ -43,9 +104,7 @@ type ReminderInput = z.infer<typeof ReminderInputSchema>;
 
 
 export async function sendReminder(input: ReminderInput) {
-    // Access services inside the function to ensure initialization is complete.
     const db = admin.firestore();
-    const messaging = admin.messaging();
 
     const validation = ReminderInputSchema.safeParse(input);
     if (!validation.success) {
@@ -55,7 +114,6 @@ export async function sendReminder(input: ReminderInput) {
     const { recipientId, senderName, recipientName } = validation.data;
 
     try {
-        // 1. Get the recipient's FCM tokens from Firestore
         const tokensSnapshot = await db
           .collection('users')
           .doc(recipientId)
@@ -63,100 +121,35 @@ export async function sendReminder(input: ReminderInput) {
           .get();
 
         if (tokensSnapshot.empty) {
-          console.log(`No FCM tokens found for user ${recipientName}.`);
           return {
             success: false,
             message: `${recipientName} hasn't enabled notifications yet. They can enable them by clicking the bell icon in the app header.`,
           };
         }
 
-        const tokens = tokensSnapshot.docs.map(doc => doc.id);
+        const tokenInfos = getTokenInfos(tokensSnapshot);
         const reminderMessage = `${senderName} is thinking of you! Don't forget to check in today.`;
 
-        // 2. Construct the FCM message payload
-        const message = {
-          notification: {
-            title: 'Your circle is thinking of you! 👋',
-            body: reminderMessage,
-          },
-          webpush: {
-            fcmOptions: {
-              link: '/check-in',
-            },
-            notification: {
-              icon: '/icon-192.png',
-            }
-          },
-          tokens: tokens,
-        };
+        const response = await sendMulticastNotification(
+            tokenInfos,
+            { title: 'Your circle is thinking of you! 👋', body: reminderMessage },
+            '/check-in',
+        );
 
-        // 3. Send the message
-        const response = await messaging.sendEachForMulticast(message);
-        console.log('FCM response:', {
-          successCount: response.successCount,
-          failureCount: response.failureCount,
-          responses: response.responses.map((r, idx) => ({
-            token: tokens[idx].substring(0, 20) + '...',
-            success: r.success,
-            error: r.error?.code || r.error?.message || null,
-          })),
-        });
-        
-        // Check if any notifications were successfully sent
         if (response.successCount === 0) {
-          // All tokens failed
-          const errors = response.responses
-            .map((resp, idx) => {
-              if (!resp.success && resp.error) {
-                const errorCode = resp.error.code;
-                // Common error codes
-                if (errorCode === 'messaging/registration-token-not-registered') {
-                  return 'Notification token is invalid or expired';
-                } else if (errorCode === 'messaging/invalid-registration-token') {
-                  return 'Invalid notification token';
-                } else if (errorCode === 'messaging/invalid-argument') {
-                  return 'Invalid notification configuration';
-                }
-                return resp.error.message || 'Unknown error';
-              }
-              return null;
-            })
-            .filter(Boolean);
-          
           return {
             success: false,
-            message: `Failed to send reminder to ${recipientName}. ${errors[0] || 'Notification delivery failed. They may need to re-enable notifications.'}`,
+            message: `Failed to send reminder to ${recipientName}. Notification delivery failed. They may need to re-enable notifications.`,
           };
         }
-        
+
         if (response.failureCount > 0) {
-          // Some succeeded, some failed
-          const failedTokens: string[] = [];
-          const errors: string[] = [];
-          response.responses.forEach((resp, idx) => {
-            if (!resp.success) {
-              failedTokens.push(tokens[idx]);
-              if (resp.error) {
-                const errorCode = resp.error.code;
-                if (errorCode === 'messaging/registration-token-not-registered') {
-                  errors.push('Some devices have invalid tokens');
-                } else {
-                  errors.push(resp.error.message || 'Unknown error');
-                }
-              }
-            }
-          });
-          console.log('Some tokens failed:', failedTokens);
-          console.log('Errors:', errors);
-          
-          // Still return success if at least one notification was sent
           return {
             success: true,
             message: `Reminder sent to ${recipientName} (${response.successCount} device(s) received it, ${response.failureCount} failed).`,
           };
         }
-        
-        // All notifications sent successfully
+
         return {
           success: true,
           message: `Reminder sent to ${recipientName}! They should receive it on their device${response.successCount > 1 ? 's' : ''} shortly.`,
@@ -180,7 +173,6 @@ type SendRemindersToInactiveInput = z.infer<typeof SendRemindersToInactiveInputS
 
 export async function sendRemindersToInactiveMembers(input: SendRemindersToInactiveInput) {
     const db = admin.firestore();
-    const messaging = admin.messaging();
 
     const validation = SendRemindersToInactiveInputSchema.safeParse(input);
     if (!validation.success) {
@@ -257,27 +249,15 @@ export async function sendRemindersToInactiveMembers(input: SendRemindersToInact
                         .get();
 
                     if (!tokensSnapshot.empty) {
-                        const tokens = tokensSnapshot.docs.map(doc => doc.id);
+                        const tokenInfos = getTokenInfos(tokensSnapshot);
                         const reminderMessage = `${senderName} is thinking of you! Don't forget to check in today.`;
 
-                        const message = {
-                            notification: {
-                                title: 'Your circle is thinking of you! 👋',
-                                body: reminderMessage,
-                            },
-                            webpush: {
-                                fcmOptions: {
-                                    link: '/check-in',
-                                },
-                                notification: {
-                                    icon: '/icon-192.png',
-                                }
-                            },
-                            tokens: tokens,
-                        };
+                        const response = await sendMulticastNotification(
+                            tokenInfos,
+                            { title: 'Your circle is thinking of you! 👋', body: reminderMessage },
+                            '/check-in',
+                        );
 
-                        const response = await messaging.sendEachForMulticast(message);
-                        
                         if (response.successCount > 0) {
                             sentCount++;
                             results.push(`${userName}: sent`);
@@ -325,7 +305,6 @@ type NotifyCircleOnCheckInInput = z.infer<typeof NotifyCircleOnCheckInInputSchem
 
 export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
     const db = admin.firestore();
-    const messaging = admin.messaging();
 
     const validation = NotifyCircleOnCheckInInputSchema.safeParse(input);
     if (!validation.success) {
@@ -335,20 +314,18 @@ export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
     const { userId, userName } = validation.data;
 
     try {
-        // 1. Get user's preference
         const userDoc = await db.collection('users').doc(userId).get();
         if (!userDoc.exists) {
             return { success: false, message: 'User not found.', notified: 0 };
         }
 
         const userData = userDoc.data();
-        const notifyCircle = userData?.notifyCircleOnCheckIn !== false; // Default to true
+        const notifyCircle = userData?.notifyCircleOnCheckIn !== false;
 
         if (!notifyCircle) {
             return { success: true, message: 'Notifications disabled by user.', notified: 0 };
         }
 
-        // 2. Find all circles this user belongs to
         const circlesSnapshot = await db
             .collection('circles')
             .where('memberIds', 'array-contains', userId)
@@ -358,23 +335,18 @@ export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
             return { success: true, message: 'User is not in any circles.', notified: 0 };
         }
 
-        // 3. For each circle, notify all other members
-        let totalNotified = 0;
-        const allTokens: string[] = [];
+        const allTokenInfos: TokenInfo[] = [];
         const memberIdsSet = new Set<string>();
 
         for (const circleDoc of circlesSnapshot.docs) {
             const circleData = circleDoc.data();
             const memberIds = circleData.memberIds || [];
-            
-            // Get all other members (excluding the user who checked in)
             const otherMembers = memberIds.filter((id: string) => id !== userId);
-            
+
             for (const memberId of otherMembers) {
-                if (memberIdsSet.has(memberId)) continue; // Avoid duplicates
+                if (memberIdsSet.has(memberId)) continue;
                 memberIdsSet.add(memberId);
 
-                // Get FCM tokens for this member
                 const tokensSnapshot = await db
                     .collection('users')
                     .doc(memberId)
@@ -382,50 +354,25 @@ export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
                     .get();
 
                 tokensSnapshot.docs.forEach(tokenDoc => {
-                    allTokens.push(tokenDoc.id);
+                    allTokenInfos.push({ id: tokenDoc.id, type: tokenDoc.data().type });
                 });
             }
         }
 
-        if (allTokens.length === 0) {
+        if (allTokenInfos.length === 0) {
             return { success: true, message: 'No members with notifications enabled.', notified: 0 };
         }
 
-        // 4. Send notification to all tokens
-        const message = {
-            notification: {
-                title: `${userName} checked in! ✅`,
-                body: `${userName} just checked in. They're doing okay!`,
-            },
-            webpush: {
-                fcmOptions: {
-                    link: '/circle',
-                },
-                notification: {
-                    icon: '/icon-192.png',
-                }
-            },
-            tokens: allTokens,
-        };
-
-        const response = await messaging.sendEachForMulticast(message);
-        
-        if (response.failureCount > 0) {
-            const failedTokens: string[] = [];
-            response.responses.forEach((resp, idx) => {
-                if (!resp.success) {
-                    failedTokens.push(allTokens[idx]);
-                }
-            });
-            console.log('List of tokens that caused failures: ' + failedTokens);
-        }
-
-        totalNotified = response.successCount;
+        const response = await sendMulticastNotification(
+            allTokenInfos,
+            { title: `${userName} checked in! ✅`, body: `${userName} just checked in. They're doing okay!` },
+            '/circle',
+        );
 
         return {
             success: true,
-            message: `Notified ${totalNotified} circle member(s).`,
-            notified: totalNotified,
+            message: `Notified ${response.successCount} circle member(s).`,
+            notified: response.successCount,
         };
 
     } catch (error) {
@@ -480,13 +427,13 @@ export async function sendInvitationEmail(input: SendInvitationEmailInput) {
                 },
                 body: JSON.stringify({
                     to: inviteeEmail,
-                    subject: `${inviterName} invited you to join "${circleName}" on Daily Connect`,
+                    subject: `${inviterName} invited you to join "${circleName}" on FamShake`,
                     html: `
                         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                             <h2>You've been invited to join "${circleName}"!</h2>
                             <p>Hi there,</p>
-                            <p><strong>${inviterName}</strong> has invited you to join their circle "<strong>${circleName}</strong>" on Daily Connect.</p>
-                            <p>Daily Connect is a simple way to let your loved ones know you're okay, every day.</p>
+                            <p><strong>${inviterName}</strong> has invited you to join their circle "<strong>${circleName}</strong>" on FamShake.</p>
+                            <p>FamShake is a simple way to let your loved ones know you're okay, every day.</p>
                             ${invitationLink ? `
                                 <p style="margin: 30px 0;">
                                     <a href="${invitationLink}" style="background-color: #64B5F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
@@ -495,7 +442,7 @@ export async function sendInvitationEmail(input: SendInvitationEmailInput) {
                                 </p>
                             ` : `
                                 <p style="margin: 30px 0;">
-                                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup" style="background-color: #64B5F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                                    <a href="${process.env.NEXT_PUBLIC_APP_URL || ''}/signup" style="background-color: #64B5F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
                                         Sign Up to Join
                                     </a>
                                 </p>
@@ -507,7 +454,7 @@ export async function sendInvitationEmail(input: SendInvitationEmailInput) {
                             </p>
                         </div>
                     `,
-                    text: `${inviterName} invited you to join "${circleName}" on Daily Connect. ${invitationLink ? `Accept here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup`}`,
+                    text: `${inviterName} invited you to join "${circleName}" on FamShake. ${invitationLink ? `Accept here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || ''}/signup`}`,
                 }),
             });
 
@@ -517,11 +464,7 @@ export async function sendInvitationEmail(input: SendInvitationEmailInput) {
             }
         } else {
             // Log email for development (email service not configured)
-            console.log('📧 Invitation Email (email service not configured):', {
-                to: inviteeEmail,
-                subject: `${inviterName} invited you to join "${circleName}"`,
-                invitationLink: invitationLink || 'Sign up to see invitation',
-            });
+            // Email service not configured - invitation email not sent
         }
 
         return { success: true, message: 'Invitation email sent.' };
@@ -576,7 +519,7 @@ export async function sendInvitationSMS(input: SendInvitationSMSInput) {
                 },
                 body: JSON.stringify({
                     to: formattedPhone,
-                    message: `${inviterName} invited you to join "${circleName}" on Daily Connect. ${invitationLink ? `Join here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup`}`,
+                    message: `${inviterName} invited you to join "${circleName}" on FamShake. ${invitationLink ? `Join here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || ''}/signup`}`,
                 }),
             });
 
@@ -586,11 +529,7 @@ export async function sendInvitationSMS(input: SendInvitationSMSInput) {
             }
         } else {
             // Log SMS for development (SMS service not configured)
-            console.log('📱 Invitation SMS (SMS service not configured):', {
-                to: formattedPhone,
-                message: `${inviterName} invited you to join "${circleName}"`,
-                invitationLink: invitationLink || 'Sign up to see invitation',
-            });
+            // SMS service not configured - invitation SMS not sent
         }
 
         return { success: true, message: 'Invitation SMS sent.' };
@@ -642,7 +581,7 @@ export async function sendInvitationWhatsApp(input: SendInvitationWhatsAppInput)
         if (whatsappServiceUrl && whatsappApiKey && whatsappPhoneNumberId) {
             // If WhatsApp service is configured, send the message
             // This uses the WhatsApp Business API format (Meta/Twilio)
-            const messageText = `${inviterName} invited you to join "${circleName}" on Daily Connect. ${invitationLink ? `Join here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || 'https://daily-connect-app.vercel.app'}/signup`}`;
+            const messageText = `${inviterName} invited you to join "${circleName}" on FamShake. ${invitationLink ? `Join here: ${invitationLink}` : `Sign up at ${process.env.NEXT_PUBLIC_APP_URL || ''}/signup`}`;
             
             const whatsappResponse = await fetch(whatsappServiceUrl, {
                 method: 'POST',
@@ -666,12 +605,7 @@ export async function sendInvitationWhatsApp(input: SendInvitationWhatsAppInput)
             }
         } else {
             // Log WhatsApp message for development (service not configured)
-            console.log('💬 Invitation WhatsApp (WhatsApp service not configured):', {
-                to: formattedPhone,
-                message: `${inviterName} invited you to join "${circleName}"`,
-                invitationLink: invitationLink || 'Sign up to see invitation',
-                note: 'WhatsApp is ~43x cheaper than SMS ($0.0014 vs $0.06 per message)',
-            });
+            // WhatsApp service not configured - invitation WhatsApp not sent
         }
 
         return { success: true, message: 'Invitation WhatsApp sent.' };
@@ -697,7 +631,6 @@ type SendEmergencyAlertInput = z.infer<typeof SendEmergencyAlertInputSchema>;
  */
 export async function sendEmergencyAlert(input: SendEmergencyAlertInput) {
     const db = admin.firestore();
-    const messaging = admin.messaging();
 
     const validation = SendEmergencyAlertInputSchema.safeParse(input);
     if (!validation.success) {
@@ -731,21 +664,18 @@ export async function sendEmergencyAlert(input: SendEmergencyAlertInput) {
             .get();
 
         if (!circlesSnapshot.empty) {
-            const allTokens: string[] = [];
+            const allTokenInfos: TokenInfo[] = [];
             const memberIdsSet = new Set<string>();
 
             for (const circleDoc of circlesSnapshot.docs) {
                 const circleData = circleDoc.data();
                 const memberIds = circleData.memberIds || [];
-                
-                // Get all other members (excluding the user)
                 const otherMembers = memberIds.filter((id: string) => id !== userId);
-                
+
                 for (const memberId of otherMembers) {
                     if (memberIdsSet.has(memberId)) continue;
                     memberIdsSet.add(memberId);
 
-                    // Get FCM tokens for this member
                     const tokensSnapshot = await db
                         .collection('users')
                         .doc(memberId)
@@ -753,29 +683,20 @@ export async function sendEmergencyAlert(input: SendEmergencyAlertInput) {
                         .get();
 
                     tokensSnapshot.docs.forEach(tokenDoc => {
-                        allTokens.push(tokenDoc.id);
+                        allTokenInfos.push({ id: tokenDoc.id, type: tokenDoc.data().type });
                     });
                 }
             }
 
-            if (allTokens.length > 0) {
-                const message = {
-                    notification: {
+            if (allTokenInfos.length > 0) {
+                const response = await sendMulticastNotification(
+                    allTokenInfos,
+                    {
                         title: `⚠️ ${userName} hasn't checked in for ${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}`,
                         body: `${userName} hasn't checked in since ${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''} ago. Please check on them.`,
                     },
-                    webpush: {
-                        fcmOptions: {
-                            link: '/circle',
-                        },
-                        notification: {
-                            icon: '/icon-192.png',
-                        }
-                    },
-                    tokens: allTokens,
-                };
-
-                const response = await messaging.sendEachForMulticast(message);
+                    '/circle',
+                );
                 circleNotified = response.successCount;
             }
         }
@@ -805,7 +726,7 @@ export async function sendEmergencyAlert(input: SendEmergencyAlertInput) {
                                     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                                         <h2 style="color: #dc2626;">⚠️ Emergency Alert</h2>
                                         <p>Hello ${contactName},</p>
-                                        <p><strong>${userName}${relationship}</strong> hasn't checked in on Daily Connect for <strong>${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}</strong>.</p>
+                                        <p><strong>${userName}${relationship}</strong> hasn't checked in on FamShake for <strong>${daysSinceLastCheckIn} day${daysSinceLastCheckIn !== 1 ? 's' : ''}</strong>.</p>
                                         <p>This is an automated alert. Please check on them to make sure they're okay.</p>
                                         <p style="margin-top: 30px; color: #666; font-size: 12px;">
                                             This alert was sent because ${userName} has you set as their emergency contact and hasn't checked in for 2+ days.
@@ -885,7 +806,6 @@ type SendNotOkayAlertInput = z.infer<typeof SendNotOkayAlertInputSchema>;
  */
 export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
     const db = admin.firestore();
-    const messaging = admin.messaging();
 
     const validation = SendNotOkayAlertInputSchema.safeParse(input);
     if (!validation.success) {
@@ -897,6 +817,7 @@ export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
     try {
         let notified = 0;
         const alertMessage = message || `${userName} needs help. Please check on them.`;
+        const alertNotification = { title: `⚠️ ${userName} needs help`, body: alertMessage };
 
         // If recipientId is set, send to specific person
         if (recipientId) {
@@ -907,37 +828,18 @@ export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
                 .get();
 
             if (!tokensSnapshot.empty) {
-                const tokens = tokensSnapshot.docs.map(doc => doc.id);
-                const fcmMessage = {
-                    notification: {
-                        title: `⚠️ ${userName} needs help`,
-                        body: alertMessage,
-                    },
-                    webpush: {
-                        fcmOptions: {
-                            link: '/circle',
-                        },
-                        notification: {
-                            icon: '/icon-192.png',
-                        }
-                    },
-                    tokens: tokens,
-                };
-
-                const response = await messaging.sendEachForMulticast(fcmMessage);
+                const response = await sendMulticastNotification(
+                    getTokenInfos(tokensSnapshot), alertNotification, '/circle',
+                );
                 notified = response.successCount;
 
-                // Also save alert to Firestore for tracking
                 await db.collection('notOkayAlerts').add({
-                    userId,
-                    userName,
-                    recipientId,
-                    message: alertMessage,
+                    userId, userName, recipientId, message: alertMessage,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     resolved: false,
                 });
             }
-        } 
+        }
         // If circleId is set, send to circle members
         else if (circleId) {
             const circleDoc = await db.collection('circles').doc(circleId).get();
@@ -949,7 +851,7 @@ export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
             const memberIds = circleData?.memberIds || [];
             const otherMemberIds = memberIds.filter((id: string) => id !== userId);
 
-            const allTokens: string[] = [];
+            const allTokenInfos: TokenInfo[] = [];
             for (const memberId of otherMemberIds) {
                 const tokensSnapshot = await db
                     .collection('users')
@@ -958,41 +860,21 @@ export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
                     .get();
 
                 tokensSnapshot.docs.forEach(tokenDoc => {
-                    allTokens.push(tokenDoc.id);
+                    allTokenInfos.push({ id: tokenDoc.id, type: tokenDoc.data().type });
                 });
             }
 
-            if (allTokens.length > 0) {
-                const fcmMessage = {
-                    notification: {
-                        title: `⚠️ ${userName} needs help`,
-                        body: alertMessage,
-                    },
-                    webpush: {
-                        fcmOptions: {
-                            link: '/circle',
-                        },
-                        notification: {
-                            icon: '/icon-192.png',
-                        }
-                    },
-                    tokens: allTokens,
-                };
-
-                const response = await messaging.sendEachForMulticast(fcmMessage);
+            if (allTokenInfos.length > 0) {
+                const response = await sendMulticastNotification(allTokenInfos, alertNotification, '/circle');
                 notified = response.successCount;
 
-                // Save alert to Firestore
                 await db.collection('notOkayAlerts').add({
-                    userId,
-                    userName,
-                    circleId,
-                    message: alertMessage,
+                    userId, userName, circleId, message: alertMessage,
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
                     resolved: false,
                 });
             }
-        } 
+        }
         // Otherwise, send to all circles user belongs to
         else {
             const circlesSnapshot = await db
@@ -1001,7 +883,7 @@ export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
                 .get();
 
             if (!circlesSnapshot.empty) {
-                const allTokens: string[] = [];
+                const allTokenInfos: TokenInfo[] = [];
                 const memberIdsSet = new Set<string>();
 
                 for (const circleDoc of circlesSnapshot.docs) {
@@ -1020,36 +902,17 @@ export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
                             .get();
 
                         tokensSnapshot.docs.forEach(tokenDoc => {
-                            allTokens.push(tokenDoc.id);
+                            allTokenInfos.push({ id: tokenDoc.id, type: tokenDoc.data().type });
                         });
                     }
                 }
 
-                if (allTokens.length > 0) {
-                    const fcmMessage = {
-                        notification: {
-                            title: `⚠️ ${userName} needs help`,
-                            body: alertMessage,
-                        },
-                        webpush: {
-                            fcmOptions: {
-                                link: '/circle',
-                            },
-                            notification: {
-                                icon: '/icon-192.png',
-                            }
-                        },
-                        tokens: allTokens,
-                    };
-
-                    const response = await messaging.sendEachForMulticast(fcmMessage);
+                if (allTokenInfos.length > 0) {
+                    const response = await sendMulticastNotification(allTokenInfos, alertNotification, '/circle');
                     notified = response.successCount;
 
-                    // Save alert to Firestore
                     await db.collection('notOkayAlerts').add({
-                        userId,
-                        userName,
-                        message: alertMessage,
+                        userId, userName, message: alertMessage,
                         createdAt: admin.firestore.FieldValue.serverTimestamp(),
                         resolved: false,
                     });

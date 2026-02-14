@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.dailyconnect.app',
-  appName: 'Daily Connect',
+  appName: 'FamShake',
   // For development: Use server.url to point to your dev server
   // For production: Either deploy Next.js and point server.url to it, OR use static export
   // Note: Next.js builds to '.next' by default. For static export, add 'output: "export"' to next.config.js
@@ -12,10 +12,10 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
     iosScheme: 'https',
     // For development with live reload, uncomment and set your dev server URL:
-    url: 'http://192.168.2.112:3000',
-    cleartext: true
+    // url: 'http://192.168.2.112:3000',
+    // cleartext: true
     // For production, point to your deployed Next.js app:
-    // url: 'https://your-app.vercel.app',
+    url: 'https://daily-connect-app.vercel.app',
   },
   plugins: {
     SplashScreen: {

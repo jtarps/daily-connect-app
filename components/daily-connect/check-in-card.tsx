@@ -302,8 +302,6 @@ const CheckInCard = () => {
       const checkInRef = doc(firestore, "users", user.uid, "checkIns", latestCheckIn.id);
       const userRef = doc(firestore, "users", user.uid);
 
-      console.log("Undo check-in: Starting transaction", { checkInId: latestCheckIn.id, userId: user.uid });
-
       await runTransaction(firestore, async (transaction) => {
         // IMPORTANT: Firestore transactions require ALL reads before ALL writes
         // Read both documents first
@@ -334,7 +332,6 @@ const CheckInCard = () => {
         }
       });
 
-      console.log("Undo check-in: Transaction completed successfully");
       toast({
         title: "Check-in Undone",
         description: "Your check-in has been removed. You can check in again.",

@@ -160,7 +160,7 @@ export default function InviteAcceptPage() {
           <CardHeader className="text-center">
             <CardTitle>Join {invitation?.circleName}</CardTitle>
             <CardDescription>
-              You&apos;ve been invited to join this circle on Daily Connect!
+              You&apos;ve been invited to join this circle on FamShake!
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -191,7 +191,7 @@ export default function InviteAcceptPage() {
           <CardHeader className="text-center">
             <CardTitle>Join {invitation.circleName}</CardTitle>
             <CardDescription>
-              You&apos;ve been invited to join this circle on Daily Connect!
+              You&apos;ve been invited to join this circle on FamShake!
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

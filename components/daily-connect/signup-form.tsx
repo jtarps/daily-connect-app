@@ -155,7 +155,7 @@ export default function SignupForm() {
     <Card>
       <CardHeader className="text-center">
         <CardTitle>Create an Account</CardTitle>
-        <CardDescription>Join Daily Connect to stay in touch.</CardDescription>
+        <CardDescription>Join FamShake to stay in touch.</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs value={authMethod} onValueChange={(v) => setAuthMethod(v as 'email' | 'phone')} className="w-full">

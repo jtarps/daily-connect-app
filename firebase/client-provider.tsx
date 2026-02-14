@@ -45,19 +45,6 @@ async function initializeFirebase() {
         messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || (isBrowser ? '' : firebaseConfig.messagingSenderId),
       };
 
-      // Log detailed debug info
-      console.log('Firebase initialization - checking env vars:', {
-        'process.env.NEXT_PUBLIC_FIREBASE_API_KEY': process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? `${process.env.NEXT_PUBLIC_FIREBASE_API_KEY.substring(0, 10)}...` : 'NOT SET',
-        'process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID': process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'NOT SET',
-        'process.env.NEXT_PUBLIC_FIREBASE_APP_ID': process.env.NEXT_PUBLIC_FIREBASE_APP_ID || 'NOT SET',
-        'process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN': process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'NOT SET',
-        'process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID': process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || 'NOT SET',
-        'firebaseConfig.apiKey': firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'EMPTY',
-        'firebaseConfig.projectId': firebaseConfig.projectId || 'EMPTY',
-        'envVars.apiKey': envVars.apiKey ? `${envVars.apiKey.substring(0, 10)}...` : 'EMPTY',
-        'envVars.projectId': envVars.projectId || 'EMPTY',
-        'isBrowser': isBrowser,
-      });
 
       if (!envVars.apiKey || envVars.apiKey.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_API_KEY');
       if (!envVars.projectId || envVars.projectId.trim() === '') missingVars.push('NEXT_PUBLIC_FIREBASE_PROJECT_ID');
@@ -115,14 +102,11 @@ async function initializeFirebase() {
             registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
               scope: '/',
             });
-            console.log('Firebase Messaging service worker registered:', registration);
+            // Service worker registered
           } else {
-            console.log('Firebase Messaging service worker already registered:', registration);
+            // Service worker already registered
           }
-          
-          // Initialize messaging
-          // Note: getMessaging() doesn't take serviceWorkerRegistration as a parameter
-          // The service worker registration is handled automatically when registered
+
           messaging = getMessaging(firebaseApp);
         } else {
           console.warn('Firebase Messaging: Service workers not available (likely in Capacitor WebView). Messaging will be disabled.');
@@ -158,9 +142,9 @@ async function initializeFirebase() {
           registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
             scope: '/',
           });
-          console.log('Firebase Messaging service worker registered:', registration);
+          // Service worker registered
         } else {
-          console.log('Firebase Messaging service worker already registered:', registration);
+          // Service worker already registered
         }
         
         // Initialize messaging
@@ -215,23 +199,6 @@ export function FirebaseClientProvider({ children }: FirebaseClientProviderProps
       setInitError(null);
       
       try {
-        // Debug: Log environment variable presence (without exposing values)
-        const envVars = {
-          hasProjectId: !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-          hasAppId: !!process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-          hasApiKey: !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-          hasAuthDomain: !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-          hasMessagingSenderId: !!process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-        };
-        console.log('Firebase env vars check:', envVars);
-        console.log('Firebase config values:', {
-          projectId: firebaseConfig.projectId ? `${firebaseConfig.projectId.substring(0, 10)}...` : 'MISSING',
-          appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 10)}...` : 'MISSING',
-          apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'MISSING',
-          authDomain: firebaseConfig.authDomain ? `${firebaseConfig.authDomain.substring(0, 20)}...` : 'MISSING',
-          messagingSenderId: firebaseConfig.messagingSenderId || 'MISSING',
-        });
-        
         // Initialize Firebase on the client side
         const services = await initializeFirebase();
         setFirebaseServices(services);

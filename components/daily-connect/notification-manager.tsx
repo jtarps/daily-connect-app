@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useMessaging, useUser, useFirestore } from '@/firebase/provider';
 import { getToken, onMessage } from 'firebase/messaging';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
@@ -16,22 +16,22 @@ export function NotificationManager() {
   const messaging = useMessaging();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'prompt' | 'unsupported'>('prompt');
+  const [notificationPermission, setNotificationPermission] = useState<string>('prompt');
   const [isDismissed, setIsDismissed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Prevent hydration errors by only rendering on client
+  const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Effect to listen for incoming foreground messages
+  // Web: Listen for foreground messages
   useEffect(() => {
-    if (!messaging) return;
+    if (!messaging || isNative) return;
 
     const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Foreground message received.', payload);
       toast({
         title: payload.notification?.title,
         description: payload.notification?.body,
@@ -39,82 +39,170 @@ export function NotificationManager() {
     });
 
     return () => unsubscribe();
-  }, [messaging, toast]);
+  }, [messaging, toast, isNative]);
 
-  // Effect to handle token registration
+  // Native: Set up Capacitor push notifications
   useEffect(() => {
-    const handleTokenRegistration = async () => {
-      if (!messaging || !user || !firestore) return;
-      
-      // Check if we're in a native Capacitor app - web push doesn't work there
-      const isNative = Capacitor.isNativePlatform();
-      if (isNative) {
-        setNotificationPermission('unsupported');
-        return;
+    if (!isNative || !user || !firestore || !isMounted) return;
+
+    let registrationCleanup: (() => void) | undefined;
+    let foregroundCleanup: (() => void) | undefined;
+
+    const setupNativePush = async () => {
+      try {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+
+        // Check current permission
+        const permStatus = await PushNotifications.checkPermissions();
+
+        if (permStatus.receive === 'granted') {
+          setNotificationPermission('granted');
+          await PushNotifications.register();
+        } else if (permStatus.receive === 'denied') {
+          setNotificationPermission('denied');
+        } else {
+          setNotificationPermission('prompt');
+        }
+
+        // Listen for successful registration (get APNs token)
+        const regListener = await PushNotifications.addListener('registration', async (token) => {
+          if (!user || !firestore) return;
+          try {
+            const tokenRef = doc(firestore, 'users', user.uid, 'fcmTokens', token.value);
+            await setDoc(tokenRef, {
+              token: token.value,
+              type: 'apns',
+              platform: 'ios',
+              createdAt: serverTimestamp(),
+            });
+          } catch (err) {
+            console.error('Failed to store native push token:', err);
+          }
+        });
+        registrationCleanup = () => regListener.remove();
+
+        // Listen for registration errors
+        await PushNotifications.addListener('registrationError', (err) => {
+          console.error('Native push registration error:', err);
+        });
+
+        // Listen for foreground notifications
+        const fgListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+          toast({
+            title: notification.title || 'Notification',
+            description: notification.body,
+          });
+        });
+        foregroundCleanup = () => fgListener.remove();
+      } catch (err) {
+        console.error('Error setting up native push:', err);
       }
-      
-      if (typeof window === 'undefined' || !('Notification' in window)) {
-        setNotificationPermission('unsupported');
-        return;
-      }
-      
-      // Check if user dismissed the prompt
+
+      // Check dismissal status
       const wasDismissed = localStorage.getItem('notification-prompt-dismissed');
       if (wasDismissed === 'true') {
         setIsDismissed(true);
       }
-      
-      // Check current permission status
+    };
+
+    setupNativePush();
+
+    return () => {
+      registrationCleanup?.();
+      foregroundCleanup?.();
+    };
+  }, [isNative, user, firestore, isMounted, toast]);
+
+  // Web: Handle token registration
+  useEffect(() => {
+    if (isNative) return;
+
+    const handleTokenRegistration = async () => {
+      if (!messaging || !user || !firestore) return;
+
+      if (typeof window === 'undefined' || !('Notification' in window)) {
+        setNotificationPermission('unsupported');
+        return;
+      }
+
+      const wasDismissed = localStorage.getItem('notification-prompt-dismissed');
+      if (wasDismissed === 'true') {
+        setIsDismissed(true);
+      }
+
       const currentPermission = Notification.permission;
       if (currentPermission !== 'granted') {
-          setNotificationPermission(currentPermission);
-          return;
+        setNotificationPermission(currentPermission);
+        return;
       }
-       setNotificationPermission('granted');
+      setNotificationPermission('granted');
 
       try {
         const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
         if (currentToken) {
-          console.log('FCM Token:', currentToken);
-          // Save the token to Firestore
           const tokenRef = doc(firestore, 'users', user.uid, 'fcmTokens', currentToken);
           await setDoc(tokenRef, {
             token: currentToken,
             createdAt: serverTimestamp(),
           });
         } else {
-          console.log('No registration token available. Request permission to generate one.');
-           setNotificationPermission('prompt');
+          setNotificationPermission('prompt');
         }
       } catch (err) {
-        console.error('An error occurred while retrieving token. ', err);
+        console.error('Error retrieving FCM token:', err);
         setNotificationPermission('unsupported');
       }
     };
 
     handleTokenRegistration();
-  }, [messaging, user, firestore]);
-  
-  const requestPermission = async () => {
-    if (isLoading) return; // Prevent double-clicks
-    
-    console.log('requestPermission called', { messaging: !!messaging, user: !!user, firestore: !!firestore });
-    
-    // Check if we're in a native Capacitor app
-    const isNative = Capacitor.isNativePlatform();
+  }, [messaging, user, firestore, isNative]);
+
+  // Permission request handler (works for both web and native)
+  const requestPermission = useCallback(async () => {
+    if (isLoading) return;
+
+    // Native path
     if (isNative) {
-      toast({
-        title: 'Native App Detected',
-        description: 'Web push notifications don\'t work in native apps. Use the browser or PWA version to enable notifications, or we can add native push notifications later.',
-        variant: 'destructive',
-      });
+      if (!user || !firestore) return;
+      setIsLoading(true);
+      try {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        const result = await PushNotifications.requestPermissions();
+
+        if (result.receive === 'granted') {
+          setNotificationPermission('granted');
+          await PushNotifications.register();
+          toast({
+            title: 'Notifications Enabled',
+            description: "You'll now receive reminders and alerts from your circle.",
+          });
+          setIsDismissed(true);
+        } else {
+          setNotificationPermission('denied');
+          toast({
+            title: 'Notifications Blocked',
+            description: 'You can enable notifications in Settings > FamShake > Notifications.',
+            variant: 'destructive',
+          });
+        }
+      } catch (error) {
+        console.error('Error requesting native push permission:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to enable notifications.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
-    
+
+    // Web path
     if (typeof window === 'undefined' || !('Notification' in window)) {
       toast({
         title: 'Not Supported',
-        description: 'Notifications are not supported in this environment. Try using a browser or PWA version.',
+        description: 'Notifications are not supported in this environment.',
         variant: 'destructive',
       });
       return;
@@ -132,14 +220,12 @@ export function NotificationManager() {
     setIsLoading(true);
     try {
       const permission = await Notification.requestPermission();
-      console.log('Notification permission result:', permission);
       setNotificationPermission(permission);
-      
+
       if (permission === 'granted') {
         try {
           const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
           if (currentToken) {
-            console.log('FCM Token:', currentToken);
             const tokenRef = doc(firestore, 'users', user.uid, 'fcmTokens', currentToken);
             await setDoc(tokenRef, {
               token: currentToken,
@@ -147,7 +233,7 @@ export function NotificationManager() {
             });
             toast({
               title: 'Notifications Enabled',
-              description: 'You\'ll now receive reminders and alerts from your circle.',
+              description: "You'll now receive reminders and alerts from your circle.",
             });
             setIsDismissed(true);
           } else {
@@ -158,7 +244,7 @@ export function NotificationManager() {
             });
           }
         } catch (err) {
-          console.error('Error getting token:', err);
+          console.error('Error getting FCM token:', err);
           toast({
             title: 'Error',
             description: 'Failed to enable notifications. Please try again.',
@@ -182,34 +268,20 @@ export function NotificationManager() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [isLoading, isNative, user, firestore, messaging, toast]);
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    // Store dismissal in localStorage so it persists
     if (typeof window !== 'undefined') {
       localStorage.setItem('notification-prompt-dismissed', 'true');
     }
   }
 
-  // Prevent hydration errors - don't render until mounted
-  if (!isMounted) {
-    return null;
-  }
-
-  // Don't show notification prompt if user is not logged in
-  if (!user) {
-    return null;
-  }
-
-  // Don't show prompt in native apps - web push doesn't work there
-  const isNative = Capacitor.isNativePlatform();
-  if (isNative) {
+  if (!isMounted || !user) {
     return null;
   }
 
   // Show prompt if permission is 'prompt' and not dismissed
-  // Also show if permission was denied but user might want to try again
   if (notificationPermission === 'prompt' && !isDismissed) {
       return (
           <div className="fixed bottom-24 right-4 z-[100] sm:bottom-20 pointer-events-auto">
@@ -230,13 +302,13 @@ export function NotificationManager() {
                   <p className="text-sm text-muted-foreground mt-1 mb-3">
                     Get reminders and alerts from your circle. You can also enable this later from the notification bell icon.
                   </p>
-                  <Button 
+                  <Button
                       onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
                           requestPermission();
                       }}
-                      size="lg" 
+                      size="lg"
                       className="w-full touch-manipulation min-h-[44px] text-base pointer-events-auto"
                       style={{ WebkitTapHighlightColor: 'transparent', pointerEvents: 'auto' }}
                       type="button"
@@ -262,7 +334,9 @@ export function NotificationManager() {
                       <X className="h-3 w-3 text-muted-foreground" />
                   </button>
                   <p className="text-xs text-muted-foreground">
-                    Notifications are blocked. Click the bell icon to enable them.
+                    {isNative
+                      ? 'Notifications are blocked. Go to Settings > FamShake to enable them.'
+                      : 'Notifications are blocked. Click the bell icon to enable them.'}
                   </p>
               </div>
           </div>

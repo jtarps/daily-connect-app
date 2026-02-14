@@ -37,7 +37,7 @@ export default function LandingPage() {
             </div>
         </div>
         <h1 className="text-4xl font-bold text-foreground font-headline mb-4">
-          Welcome to Daily Connect
+          Welcome to FamShake
         </h1>
         <p className="text-muted-foreground mb-8">
           A simple way to let your loved ones know you&apos;re okay, every day.

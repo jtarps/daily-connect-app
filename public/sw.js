@@ -1,5 +1,5 @@
-// Service Worker for Daily Connect PWA
-const CACHE_NAME = 'daily-connect-v1';
+// Service Worker for FamShake PWA
+const CACHE_NAME = 'famshake-v1';
 const urlsToCache = [
   '/',
   '/check-in',

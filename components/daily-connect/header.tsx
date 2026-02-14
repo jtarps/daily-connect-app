@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Users, Bell, Home, LogOut, Download, Moon, Sun, User } from 'lucide-react';
+import { Users, Bell, Home, LogOut, Moon, Sun, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
@@ -17,7 +17,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from 'firebase/auth';
-import { usePWAInstall } from './pwa-install-prompt';
 import { NotificationSettings } from './notification-settings';
 import { AccountStatsDialog } from './account-stats-dialog';
 import { useEffect, useState } from 'react';
@@ -34,7 +33,6 @@ const Header = () => {
   const auth = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const { canInstall, handleInstall } = usePWAInstall();
   const [safeAreaTop, setSafeAreaTop] = useState(0);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const [accountStatsOpen, setAccountStatsOpen] = useState(false);
@@ -106,7 +104,7 @@ const Header = () => {
             <Users className="text-primary-foreground" />
           </div>
           <h1 className="text-xl font-bold text-foreground font-headline">
-            Daily Connect
+            FamShake
           </h1>
         </div>
         
@@ -146,18 +144,7 @@ const Header = () => {
               )}
             </Button>
           )}
-          {canInstall && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              aria-label="Install App"
-              onClick={handleInstall}
-              title="Install Daily Connect"
-            >
-              <Download className="h-5 w-5" />
-            </Button>
-          )}
-          <Button 
+<Button 
             variant="ghost" 
             size="icon" 
             aria-label="Notifications"

@@ -17,7 +17,7 @@ try {
   messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
     
-    const notificationTitle = payload.notification?.title || 'Daily Connect';
+    const notificationTitle = payload.notification?.title || 'FamShake';
     const notificationOptions = {
       body: payload.notification?.body || '',
       icon: '/icon-192.png',
