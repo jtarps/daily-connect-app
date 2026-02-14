@@ -3,11 +3,17 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import FriendStatusCard from "./friend-status-card";
 import { useUser, useFirestore } from "@/firebase/provider";
-import { Loader, Settings, Bell, UserPlus } from "lucide-react";
+import { Loader, Settings, Bell, UserPlus, MessageSquare, MoreHorizontal } from "lucide-react";
 import { CircleManagerDialog } from "./create-circle-dialog";
 import { CircleNotes } from "./circle-notes";
 import { CircleHelpAlert } from "./circle-help-alert";
 import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { sendRemindersToInactiveMembers } from "@/app/actions";
 import { doc, getDoc } from "firebase/firestore";
@@ -23,29 +29,22 @@ export function CircleCard({ circle }: CircleCardProps) {
   const firestore = useFirestore();
   const { toast } = useToast();
   const [isSendingReminders, setIsSendingReminders] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Filter out the current user from the list of members to display
   const otherMembers = (circle.memberIds || []).filter(memberId => memberId !== user?.uid);
 
   const handleSendRemindersToInactive = async () => {
     if (!circle || !user || !firestore) return;
-    
+
     setIsSendingReminders(true);
     try {
-      // Get current user's name
-      if (!firestore) {
-        toast({
-          title: "Error",
-          description: "Firebase is not available. Please refresh the page.",
-          variant: "destructive",
-        });
-        return;
-      }
       const currentUserDocRef = doc(firestore, "users", user.uid);
       const currentUserDoc = await getDoc(currentUserDocRef);
       const currentUserData = currentUserDoc.data() as User | undefined;
-      const senderName = currentUserData 
-        ? `${currentUserData.firstName} ${currentUserData.lastName}` 
+      const senderName = currentUserData
+        ? `${currentUserData.firstName} ${currentUserData.lastName}`
         : 'Someone';
 
       const response = await sendRemindersToInactiveMembers({
@@ -87,7 +86,7 @@ export function CircleCard({ circle }: CircleCardProps) {
     }
 
     return (
-      <div className="space-y-3">
+      <div className="divide-y">
         {otherMembers.map((userId) => (
           <FriendStatusCard key={userId} userId={userId} circleId={circle.id} />
         ))}
@@ -96,44 +95,56 @@ export function CircleCard({ circle }: CircleCardProps) {
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <div className="flex-1">
-          <CardTitle className="text-lg">{circle.name}</CardTitle>
-          <CardDescription className="mt-1">
-            {otherMembers.length} member{otherMembers.length !== 1 ? 's' : ''}
-          </CardDescription>
-        </div>
-        <div className="flex items-center gap-2">
-          <CircleNotes circle={circle} />
-          <CircleHelpAlert circle={circle} />
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={handleSendRemindersToInactive}
-            disabled={isSendingReminders || otherMembers.length === 0}
-            title="Remind all inactive members"
-            className="h-8 w-8"
-          >
-            {isSendingReminders ? (
-              <Loader className="h-4 w-4 animate-spin" />
-            ) : (
-              <Bell className="h-4 w-4" />
-            )}
-            <span className="sr-only">Remind All Inactive</span>
-          </Button>
-          <CircleManagerDialog circle={circle} mode="edit">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Settings className="h-4 w-4" />
-              <span className="sr-only">Manage Circle</span>
-            </Button>
-          </CircleManagerDialog>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        {renderContent()}
-      </CardContent>
-    </Card>
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4 pb-2 sm:pb-3">
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-lg truncate">{circle.name}</CardTitle>
+            <CardDescription className="mt-0.5">
+              {otherMembers.length} member{otherMembers.length !== 1 ? 's' : ''}
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <CircleHelpAlert circle={circle} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">More options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setNotesOpen(true)}>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Notes
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={handleSendRemindersToInactive}
+                  disabled={isSendingReminders || otherMembers.length === 0}
+                >
+                  {isSendingReminders ? (
+                    <Loader className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Bell className="mr-2 h-4 w-4" />
+                  )}
+                  Remind All
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 sm:px-6 pt-0 pb-2 sm:pb-4">
+          {renderContent()}
+        </CardContent>
+      </Card>
+
+      {/* Controlled dialogs opened from dropdown */}
+      <CircleNotes circle={circle} open={notesOpen} onOpenChange={setNotesOpen} />
+      <CircleManagerDialog circle={circle} mode="edit" open={settingsOpen} onOpenChange={setSettingsOpen} />
+    </>
   );
 }
-

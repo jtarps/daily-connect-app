@@ -160,9 +160,9 @@ export function CircleHelpAlert({ circle }: CircleHelpAlertProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" title="I need help">
           <AlertTriangle className="h-4 w-4" />
-          <span>I need help</span>
+          <span className="sr-only">I need help</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[400px]">

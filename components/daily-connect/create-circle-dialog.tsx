@@ -37,13 +37,17 @@ import {
 
 
 interface CircleManagerDialogProps {
-  children: React.ReactNode;
-  circle?: Circle; 
+  children?: React.ReactNode;
+  circle?: Circle;
   mode: 'create' | 'edit';
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function CircleManagerDialog({ children, circle, mode }: CircleManagerDialogProps) {
-  const [open, setOpen] = useState(false);
+export function CircleManagerDialog({ children, circle, mode, open: controlledOpen, onOpenChange }: CircleManagerDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [circleName, setCircleName] = useState('');
   const [membersToInvite, setMembersToInvite] = useState<string[]>(['']);
   const [phonesToInvite, setPhonesToInvite] = useState<string[]>(['']);
@@ -137,8 +141,8 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
     if (!shareLink || !circle) return;
     
     const shareData = {
-      title: `Join ${circle.name || circleName} on Daily Connect`,
-      text: `${user?.email || 'Someone'} invited you to join "${circle.name || circleName}" on Daily Connect. Click the link to join!`,
+      title: `Join ${circle.name || circleName} on FamShake`,
+      text: `${user?.email || 'Someone'} invited you to join "${circle.name || circleName}" on FamShake. Click the link to join!`,
       url: shareLink,
     };
 
@@ -461,9 +465,13 @@ export function CircleManagerDialog({ children, circle, mode }: CircleManagerDia
     }
   };
 
+  const isControlled = controlledOpen !== undefined;
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+      {!isControlled && children && (
+        <DialogTrigger asChild>{children}</DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>{isEditMode ? 'Manage Circle' : 'Create a New Circle'}</DialogTitle>

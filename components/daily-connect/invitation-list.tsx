@@ -6,7 +6,6 @@ import { useFirestore, useUser, useMemoFirebase } from "@/firebase/provider";
 import { useCollection } from "@/firebase/firestore/use-collection";
 import { collection, query, where, doc, updateDoc, arrayUnion, deleteDoc } from "firebase/firestore";
 import type { Invitation } from "@/lib/data";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Loader, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -24,15 +23,15 @@ const InvitationList = () => {
             </div>
         );
     }
-    
+
     if (!user) {
         return null;
     }
-    
+
     // Get user's email and phone number for querying invitations
     const userEmail = user.email || null;
     const userPhone = user.phoneNumber || null;
-    
+
     return <PendingInvitations email={userEmail} phoneNumber={userPhone} />;
 };
 
@@ -79,17 +78,17 @@ const PendingInvitations = ({ email, phoneNumber }: { email: string | null; phon
 
     const isLoading = isLoadingEmail || isLoadingPhone;
 
-    
+
     const handleAccept = async (invitation: Invitation) => {
         if (!user || !firestore) return;
-        
+
         const circleRef = doc(firestore, 'circles', invitation.circleId);
         const invitationRef = doc(firestore, 'invitations', invitation.id);
 
         // Add user to the circle's members
         updateDoc(circleRef, {
             memberIds: arrayUnion(user.uid)
-        }).catch(async (serverError) => {
+        }).catch(async () => {
             const permissionError = new FirestorePermissionError({
                 path: circleRef.path,
                 operation: 'update',
@@ -99,7 +98,7 @@ const PendingInvitations = ({ email, phoneNumber }: { email: string | null; phon
         });
 
         // Delete the invitation
-        deleteDoc(invitationRef).catch(async (serverError) => {
+        deleteDoc(invitationRef).catch(async () => {
             const permissionError = new FirestorePermissionError({
                 path: invitationRef.path,
                 operation: 'delete',
@@ -112,11 +111,11 @@ const PendingInvitations = ({ email, phoneNumber }: { email: string | null; phon
             description: `You've been added to the "${invitation.circleName}" circle.`
         });
     };
-    
+
     const handleDecline = async (invitation: Invitation) => {
         if (!firestore) return;
         const invitationRef = doc(firestore, 'invitations', invitation.id);
-        deleteDoc(invitationRef).catch(async (serverError) => {
+        deleteDoc(invitationRef).catch(async () => {
              const permissionError = new FirestorePermissionError({
                 path: invitationRef.path,
                 operation: 'delete',
@@ -137,31 +136,28 @@ const PendingInvitations = ({ email, phoneNumber }: { email: string | null; phon
             </div>
         );
     }
-    
+
     if (!isLoading && (!myInvitations || myInvitations.length === 0)) {
-        return null; // Don't render anything if there are no invitations
+        return null;
     }
-    
+
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5"/> You&apos;re Invited!</CardTitle>
-                <CardDescription>You have pending invitations to join a circle.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {myInvitations.map((invite) => (
-                    <div key={invite.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
-                        <div>
-                            <p>You&apos;ve been invited to join <strong>{invite.circleName}</strong>.</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <Button size="sm" onClick={() => handleAccept(invite)}>Accept</Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDecline(invite)}>Decline</Button>
-                        </div>
+        <section className="space-y-2">
+            {myInvitations.map((invite) => (
+                <div key={invite.id} className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/10">
+                    <div className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/10 shrink-0">
+                        <Mail className="h-4 w-4 text-primary" />
                     </div>
-                ))}
-            </CardContent>
-        </Card>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">Join <strong>{invite.circleName}</strong></p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                        <Button size="sm" className="rounded-full h-8 px-4" onClick={() => handleAccept(invite)}>Accept</Button>
+                        <Button size="sm" variant="ghost" className="h-8" onClick={() => handleDecline(invite)}>Decline</Button>
+                    </div>
+                </div>
+            ))}
+        </section>
     );
 }
 

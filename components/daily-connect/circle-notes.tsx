@@ -23,13 +23,17 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 interface CircleNotesProps {
   circle: Circle;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function CircleNotes({ circle }: CircleNotesProps) {
+export function CircleNotes({ circle, open: controlledOpen, onOpenChange }: CircleNotesProps) {
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlledOpen ?? internalOpen;
+  const setIsOpen = onOpenChange ?? setInternalOpen;
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -86,19 +90,23 @@ export function CircleNotes({ circle }: CircleNotesProps) {
     }
   };
 
+  const isControlled = controlledOpen !== undefined;
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <MessageSquare className="h-4 w-4" />
-          <span>Notes</span>
-          {notes && notes.length > 0 && (
-            <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
-              {notes.length}
-            </span>
-          )}
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            <span>Notes</span>
+            {notes && notes.length > 0 && (
+              <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-xs">
+                {notes.length}
+              </span>
+            )}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Circle Notes</DialogTitle>

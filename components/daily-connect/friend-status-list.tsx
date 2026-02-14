@@ -2,10 +2,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUser } from "@/firebase/provider";
 import { useUserCircles } from "@/hooks/use-circles";
-import { Loader, Plus, Search, Users } from "lucide-react";
+import { Plus, Search, Users } from "lucide-react";
 import { Skeleton } from "../ui/skeleton";
 import { CircleManagerDialog } from "./create-circle-dialog";
 import { Button } from "../ui/button";
@@ -21,9 +20,9 @@ const FriendStatusList = () => {
     const filteredCircles = useMemo(() => {
         if (!circles) return [];
         if (!searchQuery.trim()) return circles;
-        
+
         const query = searchQuery.toLowerCase().trim();
-        return circles.filter(circle => 
+        return circles.filter(circle =>
             circle.name.toLowerCase().includes(query)
         );
     }, [circles, searchQuery]);
@@ -34,7 +33,6 @@ const FriendStatusList = () => {
         const element = document.getElementById(`circle-${circleId}`);
         if (element) {
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            // Highlight the circle briefly
             element.classList.add('ring-2', 'ring-primary', 'ring-offset-2');
             setTimeout(() => {
                 element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2');
@@ -64,7 +62,7 @@ const FriendStatusList = () => {
                 </div>
             );
         }
-        
+
         if (!circles || circles.length === 0) {
             return (
                 <div className="text-center space-y-4 p-12 border-2 border-dashed rounded-lg bg-muted/30">
@@ -93,8 +91,8 @@ const FriendStatusList = () => {
             return (
                 <div className="text-center text-muted-foreground p-8">
                     <p>No circles found matching &quot;{searchQuery}&quot;</p>
-                    <Button 
-                        variant="outline" 
+                    <Button
+                        variant="outline"
                         className="mt-4"
                         onClick={() => setSearchQuery('')}
                     >
@@ -116,26 +114,24 @@ const FriendStatusList = () => {
     };
 
   return (
-    <Card className="h-full">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex-1">
-            <CardTitle className="mb-0">My Circles</CardTitle>
-            <CardDescription>
-              {circles && circles.length > 0 
-                ? `${circles.length} circle${circles.length !== 1 ? 's' : ''} - See the latest check-ins from your friends and family.`
-                : 'See the latest check-ins from your friends and family.'}
-            </CardDescription>
+    <section>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold truncate">My Circles</h2>
+            <p className="text-sm text-muted-foreground">
+              {circles && circles.length > 0
+                ? `${circles.length} circle${circles.length !== 1 ? 's' : ''}`
+                : 'See check-ins from your friends and family.'}
+            </p>
         </div>
-        <div className="flex items-center gap-2">
-            <CircleManagerDialog mode="create">
-                <Button variant="outline" size="icon">
-                    <Plus className="h-4 w-4" />
-                    <span className="sr-only">Create New Circle</span>
-                </Button>
-            </CircleManagerDialog>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        <CircleManagerDialog mode="create">
+            <Button variant="outline" size="icon">
+                <Plus className="h-4 w-4" />
+                <span className="sr-only">Create New Circle</span>
+            </Button>
+        </CircleManagerDialog>
+      </div>
+      <div className="space-y-4">
         {circles && circles.length > 1 && (
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -155,6 +151,7 @@ const FriendStatusList = () => {
                 key={circle.id}
                 variant="outline"
                 size="sm"
+                className="truncate max-w-[200px]"
                 onClick={() => {
                   scrollToCircle(circle.id);
                   setSearchQuery('');
@@ -166,8 +163,8 @@ const FriendStatusList = () => {
           </div>
         )}
         {renderContent()}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   );
 };
 

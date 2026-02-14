@@ -13,7 +13,6 @@ import { doc, collection, query, orderBy, limit, getDoc } from "firebase/firesto
 import type { User, CheckIn } from "@/lib/data";
 import { sendReminder } from "@/app/actions";
 import { useState } from "react";
-import { Badge } from "../ui/badge";
 import { Skeleton } from "../ui/skeleton";
 
 
@@ -40,13 +39,13 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
   const checkInsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(
-        collection(firestore, 'users', userId, 'checkIns'), 
-        orderBy('timestamp', 'desc'), 
+        collection(firestore, 'users', userId, 'checkIns'),
+        orderBy('timestamp', 'desc'),
         limit(1)
     );
   }, [firestore, userId]);
   const { data: latestCheckIns, isLoading: isLoadingCheckIn } = useCollection<CheckIn>(checkInsQuery);
-  
+
   // Check if friend has notifications enabled (has FCM tokens)
   const fcmTokensQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -54,7 +53,7 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
   }, [firestore, userId]);
   const { data: fcmTokens } = useCollection(fcmTokensQuery);
   const hasNotificationsEnabled = fcmTokens && fcmTokens.length > 0;
-  
+
   const lastCheckIn = latestCheckIns?.[0];
 
   const handleSendReminder = async () => {
@@ -77,7 +76,7 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
         const currentUserDoc = await getDoc(currentUserDocRef);
         const currentUserData = currentUserDoc.data() as User | undefined;
         const senderName = currentUserData ? `${currentUserData.firstName} ${currentUserData.lastName}` : 'Someone';
-        
+
         const response = await sendReminder({
             recipientName: friend.firstName,
             recipientId: friend.id,
@@ -106,24 +105,24 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
 
   if (isLoading) {
       return (
-          <div className="flex items-start gap-3 rounded-lg border p-3 sm:p-4">
-              <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 rounded-full shrink-0" />
+          <div className="flex items-center gap-3 py-3 px-1">
+              <Skeleton className="h-10 w-10 rounded-full shrink-0" />
               <div className="flex-1 space-y-2">
                   <Skeleton className="h-4 w-32" />
                   <Skeleton className="h-3 w-24" />
               </div>
-              <Skeleton className="h-8 w-16 shrink-0" />
+              <Skeleton className="h-8 w-8 shrink-0 rounded" />
           </div>
       );
   }
 
   if (!friend) {
       return (
-        <div className="flex items-center gap-4 rounded-lg border border-destructive/50 bg-destructive/5 p-4">
+        <div className="flex items-center gap-3 py-3 px-1">
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
             <div className="flex-1">
                 <p className="text-sm font-medium text-destructive">Could not load member</p>
-                <p className="text-xs text-muted-foreground mt-1">Unable to load data for this member. Please try refreshing.</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Unable to load data for this member.</p>
             </div>
         </div>
       );
@@ -132,66 +131,66 @@ const FriendStatusCard = ({ userId, circleId }: FriendStatusCardProps) => {
   const { text, needsAttention, status } = formatCheckInTime(lastCheckIn?.timestamp?.toDate());
 
   // Format name: First name + last initial (e.g., "John D.")
-  const displayName = friend.lastName 
+  const displayName = friend.lastName
     ? `${friend.firstName} ${friend.lastName.substring(0, 1)}.`
     : friend.firstName;
+
+  // Status dot color
+  const statusDotColor = status === 'ok'
+    ? 'bg-green-500'
+    : status === 'away'
+    ? 'bg-yellow-500'
+    : 'bg-gray-400';
 
   return (
     <div
       className={cn(
-        "flex items-start gap-3 rounded-lg border p-3 sm:p-4 transition-all",
-        needsAttention && "border-accent bg-accent/10"
+        "flex items-center gap-3 py-3 px-1 transition-colors",
+        needsAttention && "bg-accent/5"
       )}
     >
-      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-white shrink-0">
-        <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
-          {friend.firstName.substring(0, 1)}{friend.lastName?.substring(0, 1) || ''}
-        </AvatarFallback>
-      </Avatar>
+      <div className="relative shrink-0">
+        <Avatar className="h-10 w-10">
+          <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
+            {friend.firstName.substring(0, 1)}{friend.lastName?.substring(0, 1) || ''}
+          </AvatarFallback>
+        </Avatar>
+        <span className={cn("absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background", statusDotColor)} />
+      </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-2 mb-1 flex-wrap">
-          <p className="font-semibold text-sm sm:text-base truncate">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-sm truncate">
             {displayName}
           </p>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {friend.streak && friend.streak > 1 && (
-              <span className="flex items-center gap-1 text-xs font-medium text-orange-500 bg-orange-100 dark:bg-orange-900/30 px-2 py-0.5 rounded-full whitespace-nowrap">
-                <Flame className="h-3 w-3"/> {friend.streak}
-              </span>
-            )}
-            {hasNotificationsEnabled ? (
-              <Badge variant="default" className="bg-green-500 text-xs whitespace-nowrap">
-                <Bell className="h-3 w-3 mr-1" />
-                Notifications
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="text-xs whitespace-nowrap">
-                <Bell className="h-3 w-3 mr-1 opacity-50" />
-                No Notifications
-              </Badge>
-            )}
-          </div>
+          {friend.streak && friend.streak > 1 && (
+            <span className="flex items-center gap-0.5 text-xs font-medium text-orange-500 whitespace-nowrap shrink-0">
+              <Flame className="h-3 w-3"/> {friend.streak}
+            </span>
+          )}
         </div>
         <p
           className={cn(
-            "text-xs sm:text-sm break-words",
+            "text-xs truncate",
             status === 'ok' && "text-green-600 dark:text-green-400",
             status === 'away' && "text-yellow-600 dark:text-yellow-400",
-            status === 'inactive' && "text-accent-foreground"
+            status === 'inactive' && "text-muted-foreground"
           )}
         >
           {text}
         </p>
       </div>
       {needsAttention && (
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-accent hidden sm:block" />
-            <Button size="sm" variant="outline" onClick={handleSendReminder} disabled={isSending} className="text-xs sm:text-sm">
-                {isSending ? <Loader className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin"/> : <Bell className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />}
-                <span className="hidden sm:inline">{isSending ? 'Sending...' : 'Remind'}</span>
-                <span className="sm:hidden">{isSending ? '...' : 'Remind'}</span>
-            </Button>
-        </div>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={handleSendReminder}
+          disabled={isSending}
+          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+          title={`Remind ${friend.firstName}`}
+        >
+          {isSending ? <Loader className="h-4 w-4 animate-spin"/> : <Bell className="h-4 w-4" />}
+          <span className="sr-only">Remind {friend.firstName}</span>
+        </Button>
       )}
     </div>
   );
