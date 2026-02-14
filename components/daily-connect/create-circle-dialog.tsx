@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X, Plus, UserPlus, Trash2, Share2, Copy, Check } from 'lucide-react';
+import { X, Plus, Trash2, Share2, Copy, Check, ChevronDown, Mail, Phone, Link } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Circle } from '@/lib/data';
 import { useFirestore, useUser } from '@/firebase/provider';
@@ -23,6 +23,11 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { sendInvitationEmail, sendInvitationSMS, sendInvitationWhatsApp } from '@/app/actions';
 import type { User } from '@/lib/data';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,23 +60,22 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   const [isDeleting, setIsDeleting] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [inviteSectionOpen, setInviteSectionOpen] = useState(false);
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user } = useUser();
-  
+
   const isEditMode = mode === 'edit';
   const isOwner = isEditMode && circle && user?.uid === circle.ownerId;
 
   const generateShareLink = useCallback(async (circleId: string, circleNameForInvite?: string) => {
     if (!firestore || !user) return;
-    
+
     try {
-      // Generate a unique token for this invitation
-      const token = typeof crypto !== 'undefined' && crypto.randomUUID 
-        ? crypto.randomUUID() 
+      const token = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-      
-      // Create a link-based invitation
+
       const invitationData = {
         circleId: circleId,
         circleName: circleNameForInvite || circle?.name || '',
@@ -83,8 +87,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
 
       const invitationsRef = collection(firestore, 'invitations');
       await addDoc(invitationsRef, invitationData);
-      
-      // Generate the shareable link
+
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
       const inviteLink = `${baseUrl}/invite/${token}`;
       setShareLink(inviteLink);
@@ -104,7 +107,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
         setCircleName(circle.name);
         setMembersToInvite(['']);
         setPhonesToInvite(['']);
-        // Generate share link for existing circle
+        setInviteSectionOpen(false);
         if (firestore && user) {
           generateShareLink(circle.id);
         }
@@ -113,13 +116,14 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
         setMembersToInvite(['']);
         setPhonesToInvite(['']);
         setShareLink(null);
+        setInviteSectionOpen(false);
       }
     }
   }, [circle, isEditMode, open, firestore, user, generateShareLink]);
 
   const copyShareLink = async () => {
     if (!shareLink) return;
-    
+
     try {
       await navigator.clipboard.writeText(shareLink);
       setLinkCopied(true);
@@ -138,11 +142,11 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   };
 
   const shareViaNative = async () => {
-    if (!shareLink || !circle) return;
-    
+    if (!shareLink) return;
+
     const shareData = {
-      title: `Join ${circle.name || circleName} on FamShake`,
-      text: `${user?.email || 'Someone'} invited you to join "${circle.name || circleName}" on FamShake. Click the link to join!`,
+      title: `Join ${circle?.name || circleName} on FamShake`,
+      text: `You're invited to join "${circle?.name || circleName}" on FamShake!`,
       url: shareLink,
     };
 
@@ -150,17 +154,14 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
       if (navigator.share) {
         await navigator.share(shareData);
       } else {
-        // Fallback: copy to clipboard
         await copyShareLink();
       }
     } catch (error) {
-      // User cancelled or error occurred
       if ((error as Error).name !== 'AbortError') {
         console.error('Error sharing:', error);
       }
     }
   };
-
 
   const handleMemberChange = (index: number, value: string) => {
     const newMembers = [...membersToInvite];
@@ -174,11 +175,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
 
   const removeMemberInput = (index: number) => {
     const newMembers = membersToInvite.filter((_, i) => i !== index);
-    if (newMembers.length === 0) {
-        setMembersToInvite(['']);
-    } else {
-        setMembersToInvite(newMembers);
-    }
+    setMembersToInvite(newMembers.length === 0 ? [''] : newMembers);
   };
 
   const handlePhoneChange = (index: number, value: string) => {
@@ -193,11 +190,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
 
   const removePhoneInput = (index: number) => {
     const newPhones = phonesToInvite.filter((_, i) => i !== index);
-    if (newPhones.length === 0) {
-        setPhonesToInvite(['']);
-    } else {
-        setPhonesToInvite(newPhones);
-    }
+    setPhonesToInvite(newPhones.length === 0 ? [''] : newPhones);
   };
 
   const sendInvitations = async (circleId: string, currentCircleName: string) => {
@@ -205,27 +198,22 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
     const inviterId = user.uid;
     const emailsToInvite = membersToInvite.map(m => m.trim()).filter(m => m.length > 0 && m.includes('@'));
     const phonesToInviteFiltered = phonesToInvite.map(p => p.trim()).filter(p => {
-      // Basic phone validation - should have at least 10 digits and start with +
       const cleaned = p.replace(/\D/g, '');
       return cleaned.length >= 10 && p.startsWith('+');
     });
 
-    if (emailsToInvite.length === 0 && phonesToInviteFiltered.length === 0) {
-        toast({ title: "No new members to invite.", description: "Enter at least one valid email address or phone number."});
-        return;
-    };
-    
+    if (emailsToInvite.length === 0 && phonesToInviteFiltered.length === 0) return;
+
     const invitationsRef = collection(firestore, 'invitations');
     let invitesSent = 0;
     let emailsSent = 0;
 
-    // Get inviter's name for notifications
     let inviterName = user.email || user.phoneNumber || 'Someone';
     try {
       const userDoc = await getDoc(doc(firestore, 'users', user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data() as User;
-        inviterName = userData.firstName && userData.lastName 
+        inviterName = userData.firstName && userData.lastName
           ? `${userData.firstName} ${userData.lastName}`
           : inviterName;
       }
@@ -233,7 +221,6 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
       console.error('Error fetching inviter name:', error);
     }
 
-    // Send email invitations
     for (const email of emailsToInvite) {
         try {
             const invitationData = {
@@ -244,15 +231,12 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                 status: 'pending' as const,
                 createdAt: serverTimestamp(),
             };
-
-            // Create invitation in Firestore
             await addDoc(invitationsRef, invitationData);
             invitesSent++;
 
-            // Send email notification
             const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
             const signupLink = `${baseUrl}/signup`;
-            
+
             const emailResult = await sendInvitationEmail({
                 inviteeEmail: email,
                 circleName: currentCircleName,
@@ -260,9 +244,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                 invitationLink: signupLink,
             });
 
-            if (emailResult.success) {
-                emailsSent++;
-            }
+            if (emailResult.success) emailsSent++;
         } catch (error) {
             console.error(`Error sending invitation to ${email}:`, error);
             const permissionError = new FirestorePermissionError({
@@ -274,14 +256,12 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
         }
     }
 
-    // Send phone invitations
     let smsSent = 0;
     let whatsappSent = 0;
     for (const phone of phonesToInviteFiltered) {
         try {
-            // Format phone number (ensure it starts with +)
             const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
-            
+
             const invitationData = {
                 circleId: circleId,
                 circleName: currentCircleName,
@@ -290,15 +270,12 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                 status: 'pending' as const,
                 createdAt: serverTimestamp(),
             };
-
-            // Create invitation in Firestore
             await addDoc(invitationsRef, invitationData);
             invitesSent++;
 
             const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
             const signupLink = `${baseUrl}/signup`;
 
-            // Try WhatsApp first (much cheaper - $0.0014 vs $0.06 for SMS)
             const whatsappResult = await sendInvitationWhatsApp({
                 inviteePhone: formattedPhone,
                 circleName: currentCircleName,
@@ -309,17 +286,13 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
             if (whatsappResult.success) {
                 whatsappSent++;
             } else {
-                // Fallback to SMS if WhatsApp fails
                 const smsResult = await sendInvitationSMS({
                     inviteePhone: formattedPhone,
                     circleName: currentCircleName,
                     inviterName: inviterName,
                     invitationLink: signupLink,
                 });
-
-                if (smsResult.success) {
-                    smsSent++;
-                }
+                if (smsResult.success) smsSent++;
             }
         } catch (error) {
             console.error(`Error sending invitation to ${phone}:`, error);
@@ -332,18 +305,20 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
         }
     }
 
-    const notificationSummary = [];
-    if (emailsSent > 0) notificationSummary.push(`${emailsSent} email(s)`);
-    if (whatsappSent > 0) notificationSummary.push(`${whatsappSent} WhatsApp(s)`);
-    if (smsSent > 0) notificationSummary.push(`${smsSent} SMS(s)`);
-    const notificationText = notificationSummary.length > 0 
-        ? ` and sent ${notificationSummary.join(', ')}` 
-        : '';
+    if (invitesSent > 0) {
+      const notificationSummary = [];
+      if (emailsSent > 0) notificationSummary.push(`${emailsSent} email(s)`);
+      if (whatsappSent > 0) notificationSummary.push(`${whatsappSent} WhatsApp(s)`);
+      if (smsSent > 0) notificationSummary.push(`${smsSent} SMS(s)`);
+      const notificationText = notificationSummary.length > 0
+          ? ` and sent ${notificationSummary.join(', ')}`
+          : '';
 
-    toast({
-        title: "Invitations Sent",
-        description: `Created ${invitesSent} invitation(s)${notificationText}.`,
-    });
+      toast({
+          title: "Invitations Sent",
+          description: `Created ${invitesSent} invitation(s)${notificationText}.`,
+      });
+    }
   };
 
   const handleSaveCircle = async () => {
@@ -355,44 +330,38 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
         toast({ title: "Circle name is required.", variant: 'destructive' });
         return;
     }
-    
+    if (!firestore) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Firebase is not available. Please refresh the page.' });
+        return;
+    }
+
     setIsSaving(true);
 
     try {
         if (isEditMode && circle) {
-            // EDIT MODE
-            if (!firestore) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Firebase is not available. Please refresh the page.' });
-                return;
-            }
             const circleRef = doc(firestore, 'circles', circle.id);
             if (circle.name !== circleName) {
-                await updateDoc(circleRef, { name: circleName }).catch(async (serverError) => {
+                await updateDoc(circleRef, { name: circleName }).catch(async () => {
                      const permissionError = new FirestorePermissionError({
                         path: circleRef.path,
                         operation: 'update',
                         requestResourceData: { name: circleName },
                     });
                     errorEmitter.emit('permission-error', permissionError);
-                    throw permissionError; // Stop execution if name update fails
+                    throw permissionError;
                 });
                 toast({ title: "Circle name updated." });
             }
             await sendInvitations(circle.id, circleName);
-
+            setOpen(false);
         } else {
-            // CREATE MODE
             const circleData = {
                 name: circleName,
                 ownerId: user.uid,
-                memberIds: [user.uid], // Start with just the owner
+                memberIds: [user.uid],
             };
 
-            if (!firestore) {
-                toast({ variant: 'destructive', title: 'Error', description: 'Firebase is not available. Please refresh the page.' });
-                return;
-            }
-            const circleRef = await addDoc(collection(firestore, 'circles'), circleData).catch(async (serverError) => {
+            const circleRef = await addDoc(collection(firestore, 'circles'), circleData).catch(async () => {
                 const permissionError = new FirestorePermissionError({
                     path: 'circles',
                     operation: 'create',
@@ -401,17 +370,16 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                 errorEmitter.emit('permission-error', permissionError);
                 throw permissionError;
             });
-            
+
             toast({
                 title: "Circle Created!",
                 description: `Your circle "${circleName}" has been created.`
             });
 
             await sendInvitations(circleRef.id, circleName);
-            // Generate share link for new circle
             generateShareLink(circleRef.id, circleName);
+            setOpen(false);
         }
-        setOpen(false);
     } catch (error) {
         console.error("Error saving circle: ", error);
         toast({
@@ -426,7 +394,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
 
   const handleDeleteCircle = async () => {
     if (!circle || !user || !firestore) return;
-    
+
     if (user.uid !== circle.ownerId) {
       toast({
         title: "Permission Denied",
@@ -439,7 +407,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
     setIsDeleting(true);
     try {
       const circleRef = doc(firestore, 'circles', circle.id);
-      await deleteDoc(circleRef).catch(async (serverError) => {
+      await deleteDoc(circleRef).catch(async () => {
         const permissionError = new FirestorePermissionError({
           path: circleRef.path,
           operation: 'delete',
@@ -467,190 +435,218 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
 
   const isControlled = controlledOpen !== undefined;
 
+  const hasInvitees = membersToInvite.some(m => m.trim().length > 0) || phonesToInvite.some(p => p.trim().length > 0);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {!isControlled && children && (
         <DialogTrigger asChild>{children}</DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle>{isEditMode ? 'Manage Circle' : 'Create a New Circle'}</DialogTitle>
+      <DialogContent className="sm:max-w-[440px] max-h-[90vh] flex flex-col gap-0 p-0">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle>{isEditMode ? 'Manage Circle' : 'Create Circle'}</DialogTitle>
           <DialogDescription>
-            {isEditMode 
-                ? `Editing "${circle?.name}". Invite members by email or share a link via WhatsApp, SMS, or any messaging app.`
-                : 'Give your circle a name and invite members by email or share a link.'
+            {isEditMode
+                ? 'Update circle settings or invite new members.'
+                : 'Give your circle a name to get started.'
             }
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4 overflow-y-auto flex-1 min-h-0 pr-1 -mr-1">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
-              Name
-            </Label>
+
+        <div className="overflow-y-auto flex-1 min-h-0 px-5 space-y-4">
+          {/* Circle Name */}
+          <div className="space-y-2">
+            <Label htmlFor="circle-name">Circle name</Label>
             <Input
-              id="name"
+              id="circle-name"
               value={circleName}
               onChange={(e) => setCircleName(e.target.value)}
-              className="col-span-3"
               placeholder="e.g., Family, Book Club"
               autoFocus
               disabled={isSaving || isDeleting}
             />
           </div>
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label className="text-right pt-2 flex gap-1 items-center justify-end">
-                <UserPlus className="h-4 w-4" />
-                Invite
-            </Label>
-            <div className="col-span-3 space-y-4">
-                {/* Share Link Section */}
-                {isEditMode && circle && (
-                  <div className="space-y-2 p-3 bg-secondary/50 rounded-lg">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <Share2 className="h-4 w-4" />
-                      Share Invitation Link
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Share this link via WhatsApp, SMS, Facebook Messenger, or any messaging app. Works for anyone, even without email!
-                    </p>
-                    {shareLink ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={shareLink}
-                          readOnly
-                          className="font-mono text-xs"
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={copyShareLink}
-                          className="gap-2"
-                        >
-                          {linkCopied ? (
-                            <>
-                              <Check className="h-4 w-4" />
-                              Copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-4 w-4" />
-                              Copy
-                            </>
-                          )}
-                        </Button>
-                        {typeof window !== 'undefined' && 'share' in navigator && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={shareViaNative}
-                            className="gap-2"
-                          >
-                            <Share2 className="h-4 w-4" />
-                            Share
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
+
+          {/* Share Link — edit mode */}
+          {isEditMode && circle && (
+            <div className="space-y-3 p-3 rounded-lg bg-muted/50 border">
+              <div className="flex items-center gap-2">
+                <Link className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Invite link</Label>
+              </div>
+              {shareLink ? (
+                <div className="space-y-2">
+                  <Input
+                    value={shareLink}
+                    readOnly
+                    className="font-mono text-xs h-9"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={copyShareLink}
+                      className="flex-1 gap-2"
+                    >
+                      {linkCopied ? (
+                        <><Check className="h-4 w-4" /> Copied</>
+                      ) : (
+                        <><Copy className="h-4 w-4" /> Copy Link</>
+                      )}
+                    </Button>
+                    {typeof window !== 'undefined' && 'share' in navigator && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => generateShareLink(circle.id)}
-                        className="w-full gap-2"
+                        onClick={shareViaNative}
+                        className="flex-1 gap-2"
                       >
-                        <Share2 className="h-4 w-4" />
-                        Generate Share Link
+                        <Share2 className="h-4 w-4" /> Share
                       </Button>
                     )}
                   </div>
-                )}
-                
-                {/* Email Invitation Section */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Or invite by email</Label>
-                  <p className="text-xs text-muted-foreground">Invite new members to this circle by email. If they don&apos;t have an account, they&apos;ll be prompted to create one.</p>
-                  {membersToInvite.map((member, index) => (
-                      <div key={index} className="flex items-center gap-2">
-                          <Input
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => generateShareLink(circle.id)}
+                  className="w-full gap-2"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Generate Invite Link
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Invite by email/phone — collapsible */}
+          <Collapsible open={inviteSectionOpen} onOpenChange={setInviteSectionOpen}>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center justify-between w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Invite by email or phone
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${inviteSectionOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-4 pt-2">
+              {/* Email */}
+              <div className="space-y-2">
+                <Label className="text-sm flex items-center gap-1.5">
+                  <Mail className="h-3.5 w-3.5" /> Email
+                </Label>
+                {membersToInvite.map((member, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                        <Input
                           type="email"
                           placeholder="friend@example.com"
                           value={member}
                           onChange={(e) => handleMemberChange(index, e.target.value)}
-                          />
-                          <Button variant="ghost" size="icon" onClick={() => removeMemberInput(index)} >
+                          className="h-9"
+                        />
+                        {membersToInvite.length > 1 && (
+                          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeMemberInput(index)}>
                               <X className="h-4 w-4" />
                           </Button>
-                      </div>
-                  ))}
-                  <Button variant="outline" size="sm" onClick={addMemberInput} className="w-full">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Another Email
-                  </Button>
-                </div>
+                        )}
+                    </div>
+                ))}
+                <Button variant="ghost" size="sm" onClick={addMemberInput} className="w-full text-muted-foreground">
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add another
+                </Button>
+              </div>
 
-                {/* Phone Number Invitation Section */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Or invite by phone number</Label>
-                  <p className="text-xs text-muted-foreground">Invite new members by phone number. Include country code (e.g., +1234567890). They&apos;ll see the invitation when they sign up with that phone number.</p>
-                  {phonesToInvite.map((phone, index) => (
-                      <div key={index} className="flex items-center gap-2">
-                          <Input
+              {/* Phone */}
+              <div className="space-y-2">
+                <Label className="text-sm flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5" /> Phone
+                </Label>
+                <p className="text-xs text-muted-foreground">Include country code, e.g. +1234567890</p>
+                {phonesToInvite.map((phone, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                        <Input
                           type="tel"
                           placeholder="+1234567890"
                           value={phone}
                           onChange={(e) => handlePhoneChange(index, e.target.value)}
-                          />
-                          <Button variant="ghost" size="icon" onClick={() => removePhoneInput(index)} >
+                          className="h-9"
+                        />
+                        {phonesToInvite.length > 1 && (
+                          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removePhoneInput(index)}>
                               <X className="h-4 w-4" />
                           </Button>
-                      </div>
-                  ))}
-                  <Button variant="outline" size="sm" onClick={addPhoneInput} className="w-full">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Another Phone
-                  </Button>
-                </div>
-            </div>
-          </div>
+                        )}
+                    </div>
+                ))}
+                <Button variant="ghost" size="sm" onClick={addPhoneInput} className="w-full text-muted-foreground">
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add another
+                </Button>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
-        <DialogFooter className="flex justify-between items-center flex-shrink-0 border-t pt-4 mt-4">
-          <div>
-            {isEditMode && isOwner && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    disabled={isDeleting || isSaving}
-                    className="gap-2"
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t mt-2 flex items-center gap-2">
+          {isEditMode && isOwner && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={isDeleting || isSaving}
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10 mr-auto"
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" />
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this circle?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete &quot;{circle?.name}&quot; and remove all members. This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteCircle}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    <Trash2 className="h-4 w-4" />
-                    {isDeleting ? 'Deleting...' : 'Delete Circle'}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will permanently delete &quot;{circle?.name}&quot; and remove all members from this circle. This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleDeleteCircle}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </div>
-          <Button onClick={handleSaveCircle} disabled={isSaving || isDeleting}>
-            {isSaving ? 'Saving...' : (isEditMode ? 'Send Invites' : 'Create Circle & Invite')}
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {!isOwner && !isEditMode && <div className="mr-auto" />}
+          {isEditMode && !isOwner && <div className="mr-auto" />}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOpen(false)}
+            disabled={isSaving || isDeleting}
+          >
+            Cancel
           </Button>
-        </DialogFooter>
+          <Button
+            size="sm"
+            onClick={handleSaveCircle}
+            disabled={isSaving || isDeleting}
+          >
+            {isSaving ? 'Saving...' : (
+              isEditMode
+                ? (hasInvitees ? 'Save & Invite' : 'Save')
+                : (hasInvitees ? 'Create & Invite' : 'Create Circle')
+            )}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
