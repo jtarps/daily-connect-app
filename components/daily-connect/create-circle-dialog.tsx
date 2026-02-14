@@ -7,27 +7,19 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { X, Plus, Trash2, Share2, Copy, Check, ChevronDown, Mail, Phone, Link } from 'lucide-react';
+import { Trash2, Share2, Copy, Check, Link } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Circle } from '@/lib/data';
 import { useFirestore, useUser } from '@/firebase/provider';
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { sendInvitationEmail, sendInvitationSMS, sendInvitationWhatsApp } from '@/app/actions';
-import type { User } from '@/lib/data';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,13 +46,10 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [circleName, setCircleName] = useState('');
-  const [membersToInvite, setMembersToInvite] = useState<string[]>(['']);
-  const [phonesToInvite, setPhonesToInvite] = useState<string[]>(['']);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [inviteSectionOpen, setInviteSectionOpen] = useState(false);
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user } = useUser();
@@ -105,18 +94,12 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
     if (open) {
       if (isEditMode && circle) {
         setCircleName(circle.name);
-        setMembersToInvite(['']);
-        setPhonesToInvite(['']);
-        setInviteSectionOpen(false);
         if (firestore && user) {
           generateShareLink(circle.id);
         }
       } else {
         setCircleName('');
-        setMembersToInvite(['']);
-        setPhonesToInvite(['']);
         setShareLink(null);
-        setInviteSectionOpen(false);
       }
     }
   }, [circle, isEditMode, open, firestore, user, generateShareLink]);
@@ -163,164 +146,6 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
     }
   };
 
-  const handleMemberChange = (index: number, value: string) => {
-    const newMembers = [...membersToInvite];
-    newMembers[index] = value;
-    setMembersToInvite(newMembers);
-  };
-
-  const addMemberInput = () => {
-    setMembersToInvite([...membersToInvite, '']);
-  };
-
-  const removeMemberInput = (index: number) => {
-    const newMembers = membersToInvite.filter((_, i) => i !== index);
-    setMembersToInvite(newMembers.length === 0 ? [''] : newMembers);
-  };
-
-  const handlePhoneChange = (index: number, value: string) => {
-    const newPhones = [...phonesToInvite];
-    newPhones[index] = value;
-    setPhonesToInvite(newPhones);
-  };
-
-  const addPhoneInput = () => {
-    setPhonesToInvite([...phonesToInvite, '']);
-  };
-
-  const removePhoneInput = (index: number) => {
-    const newPhones = phonesToInvite.filter((_, i) => i !== index);
-    setPhonesToInvite(newPhones.length === 0 ? [''] : newPhones);
-  };
-
-  const sendInvitations = async (circleId: string, currentCircleName: string) => {
-    if (!user || !firestore) return;
-    const inviterId = user.uid;
-    const emailsToInvite = membersToInvite.map(m => m.trim()).filter(m => m.length > 0 && m.includes('@'));
-    const phonesToInviteFiltered = phonesToInvite.map(p => p.trim()).filter(p => {
-      const cleaned = p.replace(/\D/g, '');
-      return cleaned.length >= 10 && p.startsWith('+');
-    });
-
-    if (emailsToInvite.length === 0 && phonesToInviteFiltered.length === 0) return;
-
-    const invitationsRef = collection(firestore, 'invitations');
-    let invitesSent = 0;
-    let emailsSent = 0;
-
-    let inviterName = user.email || user.phoneNumber || 'Someone';
-    try {
-      const userDoc = await getDoc(doc(firestore, 'users', user.uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data() as User;
-        inviterName = userData.firstName && userData.lastName
-          ? `${userData.firstName} ${userData.lastName}`
-          : inviterName;
-      }
-    } catch (error) {
-      console.error('Error fetching inviter name:', error);
-    }
-
-    for (const email of emailsToInvite) {
-        try {
-            const invitationData = {
-                circleId: circleId,
-                circleName: currentCircleName,
-                inviterId: inviterId,
-                inviteeEmail: email,
-                status: 'pending' as const,
-                createdAt: serverTimestamp(),
-            };
-            await addDoc(invitationsRef, invitationData);
-            invitesSent++;
-
-            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-            const signupLink = `${baseUrl}/signup`;
-
-            const emailResult = await sendInvitationEmail({
-                inviteeEmail: email,
-                circleName: currentCircleName,
-                inviterName: inviterName,
-                invitationLink: signupLink,
-            });
-
-            if (emailResult.success) emailsSent++;
-        } catch (error) {
-            console.error(`Error sending invitation to ${email}:`, error);
-            const permissionError = new FirestorePermissionError({
-                path: 'invitations',
-                operation: 'create',
-                requestResourceData: { circleId, inviteeEmail: email },
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        }
-    }
-
-    let smsSent = 0;
-    let whatsappSent = 0;
-    for (const phone of phonesToInviteFiltered) {
-        try {
-            const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
-
-            const invitationData = {
-                circleId: circleId,
-                circleName: currentCircleName,
-                inviterId: inviterId,
-                inviteePhone: formattedPhone,
-                status: 'pending' as const,
-                createdAt: serverTimestamp(),
-            };
-            await addDoc(invitationsRef, invitationData);
-            invitesSent++;
-
-            const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-            const signupLink = `${baseUrl}/signup`;
-
-            const whatsappResult = await sendInvitationWhatsApp({
-                inviteePhone: formattedPhone,
-                circleName: currentCircleName,
-                inviterName: inviterName,
-                invitationLink: signupLink,
-            });
-
-            if (whatsappResult.success) {
-                whatsappSent++;
-            } else {
-                const smsResult = await sendInvitationSMS({
-                    inviteePhone: formattedPhone,
-                    circleName: currentCircleName,
-                    inviterName: inviterName,
-                    invitationLink: signupLink,
-                });
-                if (smsResult.success) smsSent++;
-            }
-        } catch (error) {
-            console.error(`Error sending invitation to ${phone}:`, error);
-            const permissionError = new FirestorePermissionError({
-                path: 'invitations',
-                operation: 'create',
-                requestResourceData: { circleId, inviteePhone: phone },
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        }
-    }
-
-    if (invitesSent > 0) {
-      const notificationSummary = [];
-      if (emailsSent > 0) notificationSummary.push(`${emailsSent} email(s)`);
-      if (whatsappSent > 0) notificationSummary.push(`${whatsappSent} WhatsApp(s)`);
-      if (smsSent > 0) notificationSummary.push(`${smsSent} SMS(s)`);
-      const notificationText = notificationSummary.length > 0
-          ? ` and sent ${notificationSummary.join(', ')}`
-          : '';
-
-      toast({
-          title: "Invitations Sent",
-          description: `Created ${invitesSent} invitation(s)${notificationText}.`,
-      });
-    }
-  };
-
   const handleSaveCircle = async () => {
     if (!user) {
         toast({ title: "You must be logged in.", variant: 'destructive' });
@@ -352,7 +177,6 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                 });
                 toast({ title: "Circle name updated." });
             }
-            await sendInvitations(circle.id, circleName);
             setOpen(false);
         } else {
             const circleData = {
@@ -376,7 +200,6 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                 description: `Your circle "${circleName}" has been created.`
             });
 
-            await sendInvitations(circleRef.id, circleName);
             generateShareLink(circleRef.id, circleName);
             setOpen(false);
         }
@@ -434,8 +257,6 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   };
 
   const isControlled = controlledOpen !== undefined;
-
-  const hasInvitees = membersToInvite.some(m => m.trim().length > 0) || phonesToInvite.some(p => p.trim().length > 0);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -520,75 +341,6 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
             </div>
           )}
 
-          {/* Invite by email/phone — collapsible */}
-          <Collapsible open={inviteSectionOpen} onOpenChange={setInviteSectionOpen}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center justify-between w-full py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <span className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" />
-                  Invite by email or phone
-                </span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${inviteSectionOpen ? 'rotate-180' : ''}`} />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-4 pt-2">
-              {/* Email */}
-              <div className="space-y-2">
-                <Label className="text-sm flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5" /> Email
-                </Label>
-                {membersToInvite.map((member, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                        <Input
-                          type="email"
-                          placeholder="friend@example.com"
-                          value={member}
-                          onChange={(e) => handleMemberChange(index, e.target.value)}
-                          className="h-9"
-                        />
-                        {membersToInvite.length > 1 && (
-                          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeMemberInput(index)}>
-                              <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                    </div>
-                ))}
-                <Button variant="ghost" size="sm" onClick={addMemberInput} className="w-full text-muted-foreground">
-                    <Plus className="mr-1 h-3.5 w-3.5" /> Add another
-                </Button>
-              </div>
-
-              {/* Phone */}
-              <div className="space-y-2">
-                <Label className="text-sm flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5" /> Phone
-                </Label>
-                <p className="text-xs text-muted-foreground">Include country code, e.g. +1234567890</p>
-                {phonesToInvite.map((phone, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                        <Input
-                          type="tel"
-                          placeholder="+1234567890"
-                          value={phone}
-                          onChange={(e) => handlePhoneChange(index, e.target.value)}
-                          className="h-9"
-                        />
-                        {phonesToInvite.length > 1 && (
-                          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removePhoneInput(index)}>
-                              <X className="h-4 w-4" />
-                          </Button>
-                        )}
-                    </div>
-                ))}
-                <Button variant="ghost" size="sm" onClick={addPhoneInput} className="w-full text-muted-foreground">
-                    <Plus className="mr-1 h-3.5 w-3.5" /> Add another
-                </Button>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
         </div>
 
         {/* Footer */}
@@ -640,11 +392,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
             onClick={handleSaveCircle}
             disabled={isSaving || isDeleting}
           >
-            {isSaving ? 'Saving...' : (
-              isEditMode
-                ? (hasInvitees ? 'Save & Invite' : 'Save')
-                : (hasInvitees ? 'Create & Invite' : 'Create Circle')
-            )}
+            {isSaving ? 'Saving...' : (isEditMode ? 'Save' : 'Create Circle')}
           </Button>
         </div>
       </DialogContent>
