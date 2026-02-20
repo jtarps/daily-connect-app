@@ -935,3 +935,138 @@ export async function sendNotOkayAlert(input: SendNotOkayAlertInput) {
         };
     }
 }
+
+const DeleteAccountInputSchema = z.object({
+  userId: z.string().describe('The user ID to delete.'),
+});
+type DeleteAccountInput = z.infer<typeof DeleteAccountInputSchema>;
+
+/**
+ * Permanently deletes a user account and all associated data:
+ * - Firestore: user doc, checkIns subcollection, fcmTokens subcollection
+ * - Firestore: removes user from all circles (or deletes circle if they're the sole member)
+ * - Firestore: deletes invitations sent to the user's email
+ * - Firestore: deletes notOkayAlerts created by the user
+ * - Firebase Auth: deletes the auth account
+ */
+export async function deleteAccount(input: DeleteAccountInput) {
+    const db = admin.firestore();
+
+    const validation = DeleteAccountInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.' };
+    }
+
+    const { userId } = validation.data;
+
+    try {
+        // 1. Get user data before deletion (for email lookup)
+        const userDoc = await db.collection('users').doc(userId).get();
+        const userData = userDoc.exists ? userDoc.data() : null;
+        const userEmail = userData?.email;
+
+        // 2. Delete fcmTokens subcollection
+        const fcmTokensSnapshot = await db
+            .collection('users')
+            .doc(userId)
+            .collection('fcmTokens')
+            .get();
+        const fcmBatch = db.batch();
+        fcmTokensSnapshot.docs.forEach(doc => fcmBatch.delete(doc.ref));
+        if (!fcmTokensSnapshot.empty) await fcmBatch.commit();
+
+        // 3. Delete checkIns subcollection (in batches of 500)
+        let checkInsSnapshot = await db
+            .collection('users')
+            .doc(userId)
+            .collection('checkIns')
+            .limit(500)
+            .get();
+        while (!checkInsSnapshot.empty) {
+            const batch = db.batch();
+            checkInsSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            checkInsSnapshot = await db
+                .collection('users')
+                .doc(userId)
+                .collection('checkIns')
+                .limit(500)
+                .get();
+        }
+
+        // 4. Remove user from circles (or delete circle if sole member)
+        const circlesSnapshot = await db
+            .collection('circles')
+            .where('memberIds', 'array-contains', userId)
+            .get();
+
+        for (const circleDoc of circlesSnapshot.docs) {
+            const circleData = circleDoc.data();
+            const memberIds: string[] = circleData.memberIds || [];
+            const remainingMembers = memberIds.filter((id: string) => id !== userId);
+
+            if (remainingMembers.length === 0) {
+                // Delete the circle and its notes subcollection
+                const notesSnapshot = await circleDoc.ref.collection('notes').get();
+                const notesBatch = db.batch();
+                notesSnapshot.docs.forEach(doc => notesBatch.delete(doc.ref));
+                if (!notesSnapshot.empty) await notesBatch.commit();
+                await circleDoc.ref.delete();
+            } else {
+                // Remove user from members list; transfer ownership if needed
+                const updateData: Record<string, unknown> = {
+                    memberIds: admin.firestore.FieldValue.arrayRemove(userId),
+                };
+                if (circleData.ownerId === userId) {
+                    updateData.ownerId = remainingMembers[0];
+                }
+                await circleDoc.ref.update(updateData);
+            }
+        }
+
+        // 5. Delete invitations associated with user's email
+        if (userEmail) {
+            const invitationsSnapshot = await db
+                .collection('invitations')
+                .where('inviteeEmail', '==', userEmail)
+                .get();
+            const invBatch = db.batch();
+            invitationsSnapshot.docs.forEach(doc => invBatch.delete(doc.ref));
+            if (!invitationsSnapshot.empty) await invBatch.commit();
+        }
+
+        // 6. Delete notOkayAlerts created by user
+        const alertsSnapshot = await db
+            .collection('notOkayAlerts')
+            .where('userId', '==', userId)
+            .get();
+        const alertsBatch = db.batch();
+        alertsSnapshot.docs.forEach(doc => alertsBatch.delete(doc.ref));
+        if (!alertsSnapshot.empty) await alertsBatch.commit();
+
+        // 7. Delete user document
+        if (userDoc.exists) {
+            await db.collection('users').doc(userId).delete();
+        }
+
+        // 8. Delete Firebase Auth account
+        try {
+            await admin.auth().deleteUser(userId);
+        } catch (authError: unknown) {
+            // User may already be deleted from Auth
+            const error = authError as { code?: string };
+            if (error.code !== 'auth/user-not-found') {
+                console.error('Error deleting auth account:', authError);
+            }
+        }
+
+        return { success: true, message: 'Account deleted successfully.' };
+
+    } catch (error) {
+        console.error('Error deleting account:', error);
+        return {
+            success: false,
+            message: 'There was an error deleting your account. Please try again or contact support.',
+        };
+    }
+}

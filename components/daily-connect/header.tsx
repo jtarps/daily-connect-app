@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Users, Bell, Home, LogOut, Moon, Sun, User } from 'lucide-react';
+import { Users, Bell, Home, LogOut, Moon, Sun, User, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Link from 'next/link';
@@ -19,6 +19,7 @@ import {
 import { signOut } from 'firebase/auth';
 import { NotificationSettings } from './notification-settings';
 import { AccountStatsDialog } from './account-stats-dialog';
+import { DeleteAccountDialog } from './delete-account-dialog';
 import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { useTheme } from 'next-themes';
@@ -36,6 +37,7 @@ const Header = () => {
   const [safeAreaTop, setSafeAreaTop] = useState(0);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
   const [accountStatsOpen, setAccountStatsOpen] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -174,11 +176,20 @@ const Header = () => {
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setDeleteAccountOpen(true)} className="cursor-pointer text-destructive focus:text-destructive">
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    <span>Delete Account</span>
+                </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <AccountStatsDialog 
-            open={accountStatsOpen} 
-            onOpenChange={setAccountStatsOpen} 
+          <AccountStatsDialog
+            open={accountStatsOpen}
+            onOpenChange={setAccountStatsOpen}
+          />
+          <DeleteAccountDialog
+            open={deleteAccountOpen}
+            onOpenChange={setDeleteAccountOpen}
           />
         </div>
       </div>
