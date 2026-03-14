@@ -47,6 +47,8 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMotionUsageDescription</key>
+	<string>FamShake uses motion detection to let you check in by shaking your device.</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>UIBackgroundModes</key>
