@@ -1,8 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { Capacitor } from '@capacitor/core';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const SHAKE_THRESHOLD = 25;
 const SHAKE_TIMEOUT = 1000;
@@ -10,51 +9,12 @@ const SHAKE_TIMEOUT = 1000;
 export const useShake = (onShake: () => void) => {
   const [isListening, setIsListening] = useState(false);
   const [permission, setPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+  const cleanupRef = useRef<(() => void) | undefined>();
 
   const handleShake = useCallback(onShake, [onShake]);
 
-  const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
-
-  // Auto-start on native (uses CMMotionManager - permission persists permanently)
-  // Auto-start on platforms that don't require permission (Android, Firefox, etc.)
+  // Check initial permission state
   useEffect(() => {
-    if (isNative) {
-      // Native: use Capacitor Motion plugin - no per-session permission needed
-      let cleanup: (() => void) | undefined;
-
-      const startNativeMotion = async () => {
-        try {
-          const { Motion } = await import('@capacitor/motion');
-          let lastShakeTime = 0;
-
-          const listener = await Motion.addListener('accel', (event) => {
-            const { x, y, z } = event.acceleration;
-            const magnitude = Math.sqrt(x ** 2 + y ** 2 + z ** 2);
-            const now = Date.now();
-
-            if (magnitude > SHAKE_THRESHOLD && now - lastShakeTime > SHAKE_TIMEOUT) {
-              lastShakeTime = now;
-              handleShake();
-            }
-          });
-
-          cleanup = () => listener.remove();
-          setPermission('granted');
-          setIsListening(true);
-        } catch (error) {
-          console.error('Failed to start native motion:', error);
-          setPermission('denied');
-        }
-      };
-
-      startNativeMotion();
-
-      return () => {
-        cleanup?.();
-      };
-    }
-
-    // Web: check if permission is needed
     if (typeof DeviceMotionEvent === 'undefined') {
       setPermission('denied');
       return;
@@ -65,12 +25,13 @@ export const useShake = (onShake: () => void) => {
       setPermission('granted');
       setIsListening(true);
     }
-    // iOS web/WKWebView without native: stay as 'prompt', wait for user gesture
-  }, [isNative, handleShake]);
+    // iOS (both Safari and Capacitor WKWebView): requires user gesture to request permission
+    // Stay as 'prompt', wait for startListening() call from a button tap
+  }, []);
 
-  // Web: listen for device motion events
+  // Listen for device motion events when permitted
   useEffect(() => {
-    if (isNative || !isListening || permission !== 'granted') return;
+    if (!isListening || permission !== 'granted') return;
 
     let lastShakeTime = 0;
     const handleMotion = (event: DeviceMotionEvent) => {
@@ -91,11 +52,10 @@ export const useShake = (onShake: () => void) => {
     return () => {
       window.removeEventListener('devicemotion', handleMotion);
     };
-  }, [isNative, isListening, permission, handleShake]);
+  }, [isListening, permission, handleShake]);
 
-  // Manual start (only needed for iOS web, not native)
+  // Manual start (required on iOS - must be called from a user gesture like a tap)
   const startListening = useCallback(async () => {
-    if (isNative) return; // Native auto-starts
     if (isListening && permission === 'granted') return;
 
     if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
@@ -116,7 +76,7 @@ export const useShake = (onShake: () => void) => {
       setPermission('granted');
       setIsListening(true);
     }
-  }, [isNative, isListening, permission]);
+  }, [isListening, permission]);
 
   return { startListening, permission, isListening };
 };
