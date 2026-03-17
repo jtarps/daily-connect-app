@@ -107,15 +107,23 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
     }
   }, [circle, isEditMode, open, firestore, user, generateShareLink]);
 
+  const getShareMessage = () => {
+    const circleLbl = circle?.name || circleName;
+    if (APP_STORE_URL) {
+      return `Join my circle "${circleLbl}" on FamShake! Download the app: ${APP_STORE_URL}\n\nAccept invite: ${shareLink}`;
+    }
+    return `You're invited to join "${circleLbl}" on FamShake! ${shareLink}`;
+  };
+
   const copyShareLink = async () => {
     if (!shareLink) return;
 
     try {
-      await navigator.clipboard.writeText(shareLink);
+      await navigator.clipboard.writeText(getShareMessage());
       setLinkCopied(true);
       toast({
         title: 'Link Copied!',
-        description: 'Share this link via WhatsApp, SMS, or any messaging app.',
+        description: 'Share this with your friends and family.',
       });
       setTimeout(() => setLinkCopied(false), 2000);
     } catch (error) {
@@ -131,10 +139,9 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
     if (!shareLink) return;
 
     const circleLbl = circle?.name || circleName;
-    const downloadLine = APP_STORE_URL ? `\n\nDownload FamShake: ${APP_STORE_URL}` : '';
     const shareData = {
       title: `Join ${circleLbl} on FamShake`,
-      text: `You're invited to join "${circleLbl}" on FamShake! Open this link to accept: ${shareLink}${downloadLine}`,
+      text: getShareMessage(),
     };
 
     try {
@@ -421,20 +428,15 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
             </div>
           )}
 
-          {/* Share Link — edit mode */}
+          {/* Share Invite — edit mode */}
           {isEditMode && circle && (
             <div className="space-y-3 p-3 rounded-lg bg-muted/50 border">
               <div className="flex items-center gap-2">
-                <Link className="h-4 w-4 text-muted-foreground" />
-                <Label className="text-sm font-medium">Invite link</Label>
+                <Share2 className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Share invite</Label>
               </div>
               {shareLink ? (
                 <div className="space-y-2">
-                  <Input
-                    value={shareLink}
-                    readOnly
-                    className="font-mono text-xs h-9"
-                  />
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -445,7 +447,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                       {linkCopied ? (
                         <><Check className="h-4 w-4" /> Copied</>
                       ) : (
-                        <><Copy className="h-4 w-4" /> Copy Link</>
+                        <><Copy className="h-4 w-4" /> Copy Invite</>
                       )}
                     </Button>
                     {typeof window !== 'undefined' && 'share' in navigator && (
@@ -459,6 +461,9 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
                       </Button>
                     )}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sends an invite with the App Store download link.
+                  </p>
                 </div>
               ) : (
                 <Button
