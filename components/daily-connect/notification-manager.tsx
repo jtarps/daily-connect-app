@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useMessaging, useUser, useFirestore } from '@/firebase/provider';
 import { getToken, onMessage } from 'firebase/messaging';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { VAPID_KEY } from '@/firebase/config';
 import { Button } from '../ui/button';
@@ -68,6 +68,7 @@ export function NotificationManager() {
         const regListener = await PushNotifications.addListener('registration', async (token) => {
           if (!user || !firestore) return;
           try {
+            // Save APNs token
             const tokenRef = doc(firestore, 'users', user.uid, 'fcmTokens', token.value);
             await setDoc(tokenRef, {
               token: token.value,
@@ -75,6 +76,17 @@ export function NotificationManager() {
               platform: 'ios',
               createdAt: serverTimestamp(),
             });
+
+            // Clean up stale web FCM tokens (they don't work in native apps)
+            const tokensSnapshot = await getDocs(
+              collection(firestore, 'users', user.uid, 'fcmTokens')
+            );
+            for (const tokenDoc of tokensSnapshot.docs) {
+              const data = tokenDoc.data();
+              if (data.type !== 'apns' && tokenDoc.id !== token.value) {
+                await deleteDoc(doc(firestore, 'users', user.uid, 'fcmTokens', tokenDoc.id));
+              }
+            }
           } catch (err) {
             console.error('Failed to store native push token:', err);
           }

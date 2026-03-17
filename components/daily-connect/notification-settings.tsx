@@ -29,7 +29,7 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
   const firestore = useFirestore();
   const { toast } = useToast();
   const [notificationPermission, setNotificationPermission] = useState<string>('prompt');
-  const [fcmTokens, setFcmTokens] = useState<string[]>([]);
+  const [fcmTokens, setFcmTokens] = useState<{ id: string; type?: string }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
 
@@ -73,7 +73,7 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
         const tokensSnapshot = await getDocs(
           collection(firestore, 'users', user.uid, 'fcmTokens')
         );
-        const tokens = tokensSnapshot.docs.map(doc => doc.id);
+        const tokens = tokensSnapshot.docs.map(d => ({ id: d.id, type: d.data().type }));
         setFcmTokens(tokens);
       } catch (error) {
         console.error('Error fetching tokens:', error);
@@ -130,7 +130,7 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
               const tokensSnapshot = await getDocs(
                 collection(firestore, 'users', user.uid, 'fcmTokens')
               );
-              setFcmTokens(tokensSnapshot.docs.map(d => d.id));
+              setFcmTokens(tokensSnapshot.docs.map(d => ({ id: d.id, type: d.data().type })));
             } catch {}
           }, 2000);
 
@@ -211,7 +211,7 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
             const tokensSnapshot = await getDocs(
               collection(firestore, 'users', user.uid, 'fcmTokens')
             );
-            setFcmTokens(tokensSnapshot.docs.map(d => d.id));
+            setFcmTokens(tokensSnapshot.docs.map(d => ({ id: d.id, type: d.data().type })));
 
             if (typeof window !== 'undefined') {
               localStorage.removeItem('notification-prompt-dismissed');
@@ -266,7 +266,7 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
       const tokensSnapshot = await getDocs(
         collection(firestore, 'users', user.uid, 'fcmTokens')
       );
-      setFcmTokens(tokensSnapshot.docs.map(d => d.id));
+      setFcmTokens(tokensSnapshot.docs.map(d => ({ id: d.id, type: d.data().type })));
 
       toast({
         title: 'Token Removed',
@@ -392,19 +392,24 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
               <div className="space-y-2">
                 {fcmTokens.map((token, index) => (
                   <div
-                    key={token}
+                    key={token.id}
                     className="flex items-center justify-between p-3 border rounded-lg"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">Device {index + 1}</p>
+                      <p className="text-sm font-medium">
+                        Device {index + 1}
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          ({token.type === 'apns' ? 'iOS Native' : 'Web'})
+                        </span>
+                      </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {token.substring(0, 40)}...
+                        {token.id.substring(0, 30)}...
                       </p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => removeToken(token)}
+                      onClick={() => removeToken(token.id)}
                       disabled={isLoading}
                     >
                       Remove
