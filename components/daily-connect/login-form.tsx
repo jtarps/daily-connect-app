@@ -16,10 +16,11 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/firebase/provider';
+import { useAuth, useFirestore } from '@/firebase/provider';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { PhoneAuth } from './phone-auth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,8 +32,11 @@ const formSchema = z.object({
 
 export default function LoginForm() {
   const auth = useAuth();
+  const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('invite');
   const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email');
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -58,7 +62,7 @@ export default function LoginForm() {
         title: 'Login Successful',
         description: "Welcome back!",
       });
-      router.push('/check-in');
+      router.push(inviteToken ? `/invite/${inviteToken}` : '/check-in');
     } catch (error: any) {
       console.error('Login failed:', error);
       toast({
@@ -69,12 +73,30 @@ export default function LoginForm() {
     }
   }
 
-  const handlePhoneAuthSuccess = () => {
+  const handlePhoneAuthSuccess = async (phoneNumber: string) => {
+    // Phone auth may be used by new users — ensure a Firestore profile exists
+    if (auth?.currentUser && firestore) {
+      try {
+        const userRef = doc(firestore, 'users', auth.currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            id: auth.currentUser.uid,
+            firstName: 'User',
+            lastName: '',
+            phoneNumber: phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`,
+          });
+        }
+      } catch (error) {
+        console.error('Error ensuring user profile:', error);
+      }
+    }
+
     toast({
       title: 'Login Successful',
       description: 'Welcome back!',
     });
-    router.push('/check-in');
+    router.push(inviteToken ? `/invite/${inviteToken}` : '/check-in');
   };
 
   return (

@@ -120,72 +120,80 @@ export function PhoneAuth({ onSuccess, mode }: PhoneAuthProps) {
     }
   };
 
-  if (step === 'phone') {
-    return (
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="phone">Phone Number</Label>
-          <Input
-            id="phone"
-            type="tel"
-            placeholder="+1234567890"
-            value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
-            disabled={isLoading}
-          />
-          <p className="text-xs text-muted-foreground">
-            Enter your phone number with country code (e.g., +1234567890)
-          </p>
-        </div>
-        <div id="recaptcha-container"></div>
-        <Button 
-          onClick={handleSendCode} 
-          className="w-full" 
+  return (
+    <div className="space-y-4">
+      {step === 'phone' ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone Number</Label>
+            <Input
+              id="phone"
+              type="tel"
+              placeholder="+1234567890"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              disabled={isLoading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter your phone number with country code (e.g., +1234567890)
+            </p>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="code">Verification Code</Label>
+            <Input
+              id="code"
+              type="text"
+              inputMode="numeric"
+              placeholder="123456"
+              value={verificationCode}
+              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+              disabled={isLoading}
+              maxLength={6}
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter the 6-digit code sent to {phoneNumber}
+            </p>
+          </div>
+        </>
+      )}
+      <div
+        id="recaptcha-container"
+        className="overflow-hidden"
+        style={{ display: step === 'code' ? 'none' : undefined }}
+      />
+      {step === 'phone' ? (
+        <Button
+          onClick={handleSendCode}
+          className="w-full"
           disabled={isLoading || !phoneNumber.trim()}
         >
           {isLoading ? 'Sending...' : 'Send Verification Code'}
         </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="code">Verification Code</Label>
-        <Input
-          id="code"
-          type="text"
-          placeholder="123456"
-          value={verificationCode}
-          onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-          disabled={isLoading}
-          maxLength={6}
-        />
-        <p className="text-xs text-muted-foreground">
-          Enter the 6-digit code sent to {phoneNumber}
-        </p>
-      </div>
-      <div className="flex gap-2">
-        <Button 
-          variant="outline"
-          onClick={() => {
-            setStep('phone');
-            setVerificationCode('');
-            setConfirmationResult(null);
-          }}
-          disabled={isLoading}
-        >
-          Change Number
-        </Button>
-        <Button 
-          onClick={handleVerifyCode} 
-          className="flex-1" 
-          disabled={isLoading || verificationCode.length !== 6}
-        >
-          {isLoading ? 'Verifying...' : 'Verify Code'}
-        </Button>
-      </div>
+      ) : (
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setStep('phone');
+              setVerificationCode('');
+              setConfirmationResult(null);
+            }}
+            disabled={isLoading}
+          >
+            Change Number
+          </Button>
+          <Button
+            onClick={handleVerifyCode}
+            className="flex-1"
+            disabled={isLoading || verificationCode.length !== 6}
+          >
+            {isLoading ? 'Verifying...' : 'Verify Code'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ import { useAuth, useFirestore, useUser } from '@/firebase/provider';
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { setDoc, doc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { PhoneAuth } from './phone-auth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,6 +38,8 @@ export default function SignupForm() {
   const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get('invite');
   const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email');
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -82,7 +84,7 @@ export default function SignupForm() {
         title: 'Account Created!',
         description: "You're all set up. Please verify your email.",
       });
-      router.push('/check-in');
+      router.push(inviteToken ? `/invite/${inviteToken}` : '/check-in');
     } catch (error: any) {
       console.error('Signup failed:', error);
       toast({
@@ -126,7 +128,7 @@ export default function SignupForm() {
           title: 'Account Created!',
           description: 'Your account has been created with phone authentication.',
         });
-        router.push('/check-in');
+        router.push(inviteToken ? `/invite/${inviteToken}` : '/check-in');
       } else {
         await setDoc(doc(firestore, 'users', currentUser.uid), {
           id: currentUser.uid,
@@ -139,7 +141,7 @@ export default function SignupForm() {
           title: 'Account Created!',
           description: 'Your account has been created with phone authentication.',
         });
-        router.push('/check-in');
+        router.push(inviteToken ? `/invite/${inviteToken}` : '/check-in');
       }
     } catch (error: any) {
       console.error('Error creating user profile:', error);

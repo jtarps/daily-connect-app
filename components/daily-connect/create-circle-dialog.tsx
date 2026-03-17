@@ -13,11 +13,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Trash2, Share2, Copy, Check, Link } from 'lucide-react';
+import { Trash2, Share2, Copy, Check, Link, UserPlus, Mail, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { Circle } from '@/lib/data';
+import { APP_STORE_URL } from '@/lib/constants';
 import { useFirestore, useUser } from '@/firebase/provider';
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import {
@@ -50,6 +51,8 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   const [isDeleting, setIsDeleting] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [inviteContact, setInviteContact] = useState('');
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user } = useUser();
@@ -127,10 +130,11 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   const shareViaNative = async () => {
     if (!shareLink) return;
 
+    const circleLbl = circle?.name || circleName;
+    const downloadLine = APP_STORE_URL ? `\n\nDownload FamShake: ${APP_STORE_URL}` : '';
     const shareData = {
-      title: `Join ${circle?.name || circleName} on FamShake`,
-      text: `You're invited to join "${circle?.name || circleName}" on FamShake!`,
-      url: shareLink,
+      title: `Join ${circleLbl} on FamShake`,
+      text: `You're invited to join "${circleLbl}" on FamShake! Open this link to accept: ${shareLink}${downloadLine}`,
     };
 
     try {
@@ -143,6 +147,98 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
       if ((error as Error).name !== 'AbortError') {
         console.error('Error sharing:', error);
       }
+    }
+  };
+
+  const handleInviteByContact = async () => {
+    if (!firestore || !user || !circle) return;
+    const value = inviteContact.trim();
+    if (!value) return;
+
+    const isEmail = value.includes('@');
+    const isPhone = /^\+?\d{7,15}$/.test(value.replace(/[\s\-()]/g, ''));
+
+    if (!isEmail && !isPhone) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid input',
+        description: 'Please enter a valid email address or phone number.',
+      });
+      return;
+    }
+
+    setIsSendingInvite(true);
+    try {
+      // Check if user is already in the circle
+      if (isEmail) {
+        const usersRef = collection(firestore, 'users');
+        const q = query(usersRef, where('email', '==', value));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const foundUser = snapshot.docs[0];
+          if (circle.memberIds.includes(foundUser.id)) {
+            toast({ title: 'Already a member', description: 'This person is already in this circle.' });
+            setIsSendingInvite(false);
+            return;
+          }
+          // User exists — add them directly
+          const circleRef = doc(firestore, 'circles', circle.id);
+          await updateDoc(circleRef, { memberIds: arrayUnion(foundUser.id) });
+          toast({ title: 'Member Added!', description: `${value} has been added to the circle.` });
+          setInviteContact('');
+          setIsSendingInvite(false);
+          return;
+        }
+      } else if (isPhone) {
+        const formattedPhone = value.startsWith('+') ? value : `+${value}`;
+        const usersRef = collection(firestore, 'users');
+        const q = query(usersRef, where('phoneNumber', '==', formattedPhone));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          const foundUser = snapshot.docs[0];
+          if (circle.memberIds.includes(foundUser.id)) {
+            toast({ title: 'Already a member', description: 'This person is already in this circle.' });
+            setIsSendingInvite(false);
+            return;
+          }
+          const circleRef = doc(firestore, 'circles', circle.id);
+          await updateDoc(circleRef, { memberIds: arrayUnion(foundUser.id) });
+          toast({ title: 'Member Added!', description: `${formattedPhone} has been added to the circle.` });
+          setInviteContact('');
+          setIsSendingInvite(false);
+          return;
+        }
+      }
+
+      // User not found on the platform — create a pending invitation
+      const invitationData: Record<string, unknown> = {
+        circleId: circle.id,
+        circleName: circle.name,
+        inviterId: user.uid,
+        status: 'pending' as const,
+        createdAt: serverTimestamp(),
+      };
+      if (isEmail) {
+        invitationData.inviteeEmail = value;
+      } else {
+        invitationData.inviteePhone = value.startsWith('+') ? value : `+${value}`;
+      }
+
+      await addDoc(collection(firestore, 'invitations'), invitationData);
+      toast({
+        title: 'Invitation Sent!',
+        description: `An invitation has been created for ${value}. They'll see it when they sign up.`,
+      });
+      setInviteContact('');
+    } catch (error) {
+      console.error('Error inviting contact:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not send invitation. Please try again.',
+      });
+    } finally {
+      setIsSendingInvite(false);
     }
   };
 
@@ -287,6 +383,43 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
               disabled={isSaving || isDeleting}
             />
           </div>
+
+          {/* Invite by email or phone — edit mode */}
+          {isEditMode && circle && (
+            <div className="space-y-3 p-3 rounded-lg bg-muted/50 border">
+              <div className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Add member</Label>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={inviteContact}
+                  onChange={(e) => setInviteContact(e.target.value)}
+                  placeholder="Email or phone number"
+                  className="h-9 text-sm"
+                  disabled={isSendingInvite}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleInviteByContact();
+                    }
+                  }}
+                />
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleInviteByContact}
+                  disabled={isSendingInvite || !inviteContact.trim()}
+                  className="shrink-0"
+                >
+                  {isSendingInvite ? 'Adding...' : 'Add'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If they&apos;re already on FamShake, they&apos;ll be added instantly. Otherwise, they&apos;ll see the invite when they sign up.
+              </p>
+            </div>
+          )}
 
           {/* Share Link — edit mode */}
           {isEditMode && circle && (

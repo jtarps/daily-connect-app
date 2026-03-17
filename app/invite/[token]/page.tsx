@@ -6,10 +6,11 @@ import { useFirestore, useUser } from '@/firebase/provider';
 import { collection, query, where, getDocs, doc, updateDoc, arrayUnion, deleteDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader, CheckCircle, XCircle } from 'lucide-react';
+import { Loader, CheckCircle, XCircle, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import type { Invitation } from '@/lib/data';
+import { APP_STORE_URL } from '@/lib/constants';
 
 export default function InviteAcceptPage() {
   const params = useParams();
@@ -164,20 +165,36 @@ export default function InviteAcceptPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground text-center">
-              To accept this invitation, please create an account first. You&apos;ll need an email address to sign up.
-            </p>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Note: Even though you received this link via WhatsApp/SMS, you&apos;ll still need an email address to create your account and remain logged in.
-            </p>
-            <div className="flex flex-col gap-2">
-              <Button asChild>
-                <Link href={`/signup?invite=${token}`}>Sign Up with Email</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href={`/login?invite=${token}`}>Already have an account? Log In</Link>
-              </Button>
-            </div>
+            {APP_STORE_URL ? (
+              <>
+                <p className="text-sm text-muted-foreground text-center">
+                  Download FamShake to accept this invitation and stay connected with your loved ones.
+                </p>
+                <Button asChild size="lg" className="w-full gap-2">
+                  <a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-4 w-4" />
+                    Download FamShake
+                  </a>
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  Already have the app? Open it and sign in — your invitation will be waiting.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground text-center">
+                  To accept this invitation, please create an account first.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button asChild>
+                    <Link href={`/signup?invite=${token}`}>Sign Up</Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href={`/login?invite=${token}`}>Already have an account? Log In</Link>
+                  </Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
