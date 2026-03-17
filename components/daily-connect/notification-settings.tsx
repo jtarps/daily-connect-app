@@ -372,6 +372,19 @@ export function NotificationSettings({ open, onOpenChange }: NotificationSetting
             </Button>
           )}
 
+          {/* Re-register button: permission granted but no tokens saved */}
+          {notificationPermission === 'granted' && fcmTokens.length === 0 && !isChecking && (
+            <Button
+              onClick={requestPermission}
+              disabled={isLoading}
+              className="w-full"
+              size="lg"
+            >
+              <Bell className="h-4 w-4 mr-2" />
+              {isLoading ? 'Registering...' : 'Register This Device'}
+            </Button>
+          )}
+
           {/* Device Tokens */}
           {fcmTokens.length > 0 && (
             <div className="space-y-2">

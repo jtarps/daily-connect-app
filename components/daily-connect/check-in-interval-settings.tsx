@@ -40,6 +40,9 @@ export function CheckInIntervalSettings({ children }: CheckInIntervalSettingsPro
   const { toast } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
 
   const userDocRef = useMemoFirebase(() => {
     if (!user || !firestore) return null;
@@ -116,6 +119,25 @@ export function CheckInIntervalSettings({ children }: CheckInIntervalSettingsPro
     }
   };
 
+  const handleSaveName = async () => {
+    if (!user || !userDocRef || !firstName.trim()) return;
+
+    setIsSaving(true);
+    try {
+      await updateDoc(userDocRef, {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      });
+      setEditingName(false);
+      toast({ title: 'Profile Updated', description: 'Your name has been updated.' });
+    } catch (error) {
+      console.error('Failed to update name:', error);
+      toast({ title: 'Error', description: 'Failed to update name.', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleNotifyCircleChange = async (enabled: boolean) => {
     if (!user || !userDocRef) return;
 
@@ -160,6 +182,61 @@ export function CheckInIntervalSettings({ children }: CheckInIntervalSettingsPro
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-6 py-4">
+          {/* Profile */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Profile</Label>
+            {editingName ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="First name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    disabled={isSaving}
+                  />
+                  <Input
+                    placeholder="Last name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    disabled={isSaving}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleSaveName} disabled={isSaving || !firstName.trim()}>
+                    {isSaving ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingName(false)} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <p className="font-medium">
+                    {userData?.firstName || 'User'} {userData?.lastName || ''}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {user?.email || user?.phoneNumber || ''}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFirstName(userData?.firstName || '');
+                    setLastName(userData?.lastName || '');
+                    setEditingName(true);
+                  }}
+                >
+                  Edit
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
           <div className="space-y-2">
             <Label className="text-sm font-medium">Check-in Frequency</Label>
             <Select

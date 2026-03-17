@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import FriendStatusCard from "./friend-status-card";
 import { useUser, useFirestore } from "@/firebase/provider";
-import { Loader, Settings, Bell, UserPlus, MessageSquare, MoreHorizontal } from "lucide-react";
+import { Loader, Settings, Bell, UserPlus, MessageSquare, MoreHorizontal, LogOut } from "lucide-react";
 import { CircleManagerDialog } from "./create-circle-dialog";
 import { CircleNotes } from "./circle-notes";
 import { CircleHelpAlert } from "./circle-help-alert";
@@ -16,7 +16,7 @@ import {
 } from "../ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { sendRemindersToInactiveMembers } from "@/app/actions";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, arrayRemove } from "firebase/firestore";
 import type { User, Circle } from "@/lib/data";
 import { useState } from "react";
 
@@ -69,6 +69,26 @@ export function CircleCard({ circle }: CircleCardProps) {
       setIsSendingReminders(false);
     }
   };
+
+  const handleLeaveCircle = async () => {
+    if (!user || !firestore) return;
+
+    const confirmed = window.confirm(`Are you sure you want to leave "${circle.name}"?`);
+    if (!confirmed) return;
+
+    try {
+      const circleRef = doc(firestore, 'circles', circle.id);
+      await updateDoc(circleRef, {
+        memberIds: arrayRemove(user.uid),
+      });
+      toast({ title: 'Left Circle', description: `You've left "${circle.name}".` });
+    } catch (error) {
+      console.error('Error leaving circle:', error);
+      toast({ title: 'Error', description: 'Could not leave circle.', variant: 'destructive' });
+    }
+  };
+
+  const isOwner = user?.uid === circle.ownerId;
 
   const renderContent = () => {
     if (otherMembers.length === 0) {
@@ -133,6 +153,12 @@ export function CircleCard({ circle }: CircleCardProps) {
                   <Settings className="mr-2 h-4 w-4" />
                   Settings
                 </DropdownMenuItem>
+                {!isOwner && (
+                  <DropdownMenuItem onSelect={handleLeaveCircle} className="text-destructive focus:text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Leave Circle
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
