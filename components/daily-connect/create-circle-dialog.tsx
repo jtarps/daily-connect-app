@@ -110,7 +110,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   const getShareMessage = () => {
     const circleLbl = circle?.name || circleName;
     if (APP_STORE_URL) {
-      return `Join my circle "${circleLbl}" on FamShake! Download the app: ${APP_STORE_URL}\n\nAccept invite: ${shareLink}`;
+      return `Join my circle "${circleLbl}" on FamShake! Download the app here: ${APP_STORE_URL}`;
     }
     return `You're invited to join "${circleLbl}" on FamShake! ${shareLink}`;
   };
