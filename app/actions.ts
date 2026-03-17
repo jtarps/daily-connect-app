@@ -385,6 +385,107 @@ export async function notifyCircleOnCheckIn(input: NotifyCircleOnCheckInInput) {
     }
 }
 
+// Add member to circle by email or phone
+const AddMemberInputSchema = z.object({
+    contact: z.string().describe('Email or phone number'),
+    circleId: z.string(),
+    circleName: z.string(),
+    inviterId: z.string(),
+});
+
+type AddMemberInput = z.infer<typeof AddMemberInputSchema>;
+
+export async function addMemberToCircle(input: AddMemberInput) {
+    const db = admin.firestore();
+
+    const validation = AddMemberInputSchema.safeParse(input);
+    if (!validation.success) {
+        return { success: false, message: 'Invalid input.' };
+    }
+
+    const { contact, circleId, circleName, inviterId } = validation.data;
+    const isEmail = contact.includes('@');
+    const formattedContact = !isEmail && !contact.startsWith('+') ? `+${contact}` : contact;
+
+    try {
+        // Look up user by email or phone
+        const usersRef = db.collection('users');
+        let snapshot;
+
+        if (isEmail) {
+            snapshot = await usersRef.where('email', '==', contact).limit(1).get();
+        } else {
+            snapshot = await usersRef.where('phoneNumber', '==', formattedContact).limit(1).get();
+        }
+
+        if (!snapshot.empty) {
+            const foundUser = snapshot.docs[0];
+            const circleRef = db.collection('circles').doc(circleId);
+            const circleDoc = await circleRef.get();
+
+            if (!circleDoc.exists) {
+                return { success: false, message: 'Circle not found.' };
+            }
+
+            const circleData = circleDoc.data();
+            if (circleData?.memberIds?.includes(foundUser.id)) {
+                return { success: false, message: 'This person is already in this circle.' };
+            }
+
+            // Add user directly to circle
+            await circleRef.update({
+                memberIds: admin.firestore.FieldValue.arrayUnion(foundUser.id),
+            });
+
+            // Send notification to the added user
+            const tokensSnapshot = await db.collection('users').doc(foundUser.id).collection('fcmTokens').get();
+            if (!tokensSnapshot.empty) {
+                const tokenInfos = getTokenInfos(tokensSnapshot);
+                const inviterDoc = await db.collection('users').doc(inviterId).get();
+                const inviterName = inviterDoc.exists
+                    ? `${inviterDoc.data()?.firstName || ''} ${inviterDoc.data()?.lastName || ''}`.trim()
+                    : 'Someone';
+
+                await sendMulticastNotification(
+                    tokenInfos,
+                    {
+                        title: 'Added to Circle',
+                        body: `${inviterName} added you to "${circleName}"`,
+                    },
+                );
+            }
+
+            return { success: true, message: 'Member added to circle!', added: true };
+        }
+
+        // User not found — create pending invitation
+        const invitationData: Record<string, unknown> = {
+            circleId,
+            circleName,
+            inviterId,
+            status: 'pending',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        if (isEmail) {
+            invitationData.inviteeEmail = contact;
+        } else {
+            invitationData.inviteePhone = formattedContact;
+        }
+
+        await db.collection('invitations').add(invitationData);
+
+        return {
+            success: true,
+            message: `Invitation created for ${formattedContact}. They'll see it when they sign up.`,
+            added: false,
+        };
+    } catch (error) {
+        console.error('Error adding member:', error);
+        return { success: false, message: 'Could not add member. Please try again.' };
+    }
+}
+
 // Email notification schema
 const SendInvitationEmailInputSchema = z.object({
     inviteeEmail: z.string().email(),

@@ -17,8 +17,9 @@ import { Trash2, Share2, Copy, Check, Link, UserPlus, Mail, Phone } from 'lucide
 import { useToast } from '@/hooks/use-toast';
 import type { Circle } from '@/lib/data';
 import { APP_STORE_URL } from '@/lib/constants';
+import { addMemberToCircle } from '@/app/actions';
 import { useFirestore, useUser } from '@/firebase/provider';
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import {
@@ -110,7 +111,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   const getShareMessage = () => {
     const circleLbl = circle?.name || circleName;
     if (APP_STORE_URL) {
-      return `Join my circle "${circleLbl}" on FamShake! Download the app here: ${APP_STORE_URL}`;
+      return `Join my circle "${circleLbl}" on FamShake!\n\nDownload the app: ${APP_STORE_URL}\n\nOnce you've signed up, open this link in the app to join: ${shareLink}`;
     }
     return `You're invited to join "${circleLbl}" on FamShake! ${shareLink}`;
   };
@@ -158,7 +159,7 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
   };
 
   const handleInviteByContact = async () => {
-    if (!firestore || !user || !circle) return;
+    if (!user || !circle) return;
     const value = inviteContact.trim();
     if (!value) return;
 
@@ -176,67 +177,19 @@ export function CircleManagerDialog({ children, circle, mode, open: controlledOp
 
     setIsSendingInvite(true);
     try {
-      // Check if user is already in the circle
-      if (isEmail) {
-        const usersRef = collection(firestore, 'users');
-        const q = query(usersRef, where('email', '==', value));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const foundUser = snapshot.docs[0];
-          if (circle.memberIds.includes(foundUser.id)) {
-            toast({ title: 'Already a member', description: 'This person is already in this circle.' });
-            setIsSendingInvite(false);
-            return;
-          }
-          // User exists — add them directly
-          const circleRef = doc(firestore, 'circles', circle.id);
-          await updateDoc(circleRef, { memberIds: arrayUnion(foundUser.id) });
-          toast({ title: 'Member Added!', description: `${value} has been added to the circle.` });
-          setInviteContact('');
-          setIsSendingInvite(false);
-          return;
-        }
-      } else if (isPhone) {
-        const formattedPhone = value.startsWith('+') ? value : `+${value}`;
-        const usersRef = collection(firestore, 'users');
-        const q = query(usersRef, where('phoneNumber', '==', formattedPhone));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          const foundUser = snapshot.docs[0];
-          if (circle.memberIds.includes(foundUser.id)) {
-            toast({ title: 'Already a member', description: 'This person is already in this circle.' });
-            setIsSendingInvite(false);
-            return;
-          }
-          const circleRef = doc(firestore, 'circles', circle.id);
-          await updateDoc(circleRef, { memberIds: arrayUnion(foundUser.id) });
-          toast({ title: 'Member Added!', description: `${formattedPhone} has been added to the circle.` });
-          setInviteContact('');
-          setIsSendingInvite(false);
-          return;
-        }
-      }
-
-      // User not found on the platform — create a pending invitation
-      const invitationData: Record<string, unknown> = {
+      const result = await addMemberToCircle({
+        contact: value,
         circleId: circle.id,
         circleName: circle.name,
         inviterId: user.uid,
-        status: 'pending' as const,
-        createdAt: serverTimestamp(),
-      };
-      if (isEmail) {
-        invitationData.inviteeEmail = value;
-      } else {
-        invitationData.inviteePhone = value.startsWith('+') ? value : `+${value}`;
-      }
-
-      await addDoc(collection(firestore, 'invitations'), invitationData);
-      toast({
-        title: 'Invitation Sent!',
-        description: `An invitation has been created for ${value}. They'll see it when they sign up.`,
       });
-      setInviteContact('');
+
+      if (result.success) {
+        toast({ title: result.added ? 'Member Added!' : 'Invitation Sent!', description: result.message });
+        setInviteContact('');
+      } else {
+        toast({ variant: 'destructive', title: 'Error', description: result.message });
+      }
     } catch (error) {
       console.error('Error inviting contact:', error);
       toast({
