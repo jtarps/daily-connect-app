@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { useFirestore, useUser } from '@/firebase/provider';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import type { NotOkayAlert } from '@/lib/data';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { Button } from '../ui/button';
 
 interface AlertsListProps {
   circleIds: string[];
@@ -59,10 +60,40 @@ export function AlertsList({ circleIds }: AlertsListProps) {
       });
   }, [alerts, user, circleIds]);
 
+  const handleDismiss = async (alertId: string) => {
+    if (!firestore) return;
+    try {
+      await updateDoc(doc(firestore, 'notOkayAlerts', alertId), { resolved: true });
+      setAlerts(prev => prev.filter(a => a.id !== alertId));
+    } catch (err) {
+      console.error('Error dismissing alert:', err);
+    }
+  };
+
+  const handleDismissAll = async () => {
+    if (!firestore) return;
+    for (const alert of relevantAlerts) {
+      try {
+        await updateDoc(doc(firestore, 'notOkayAlerts', alert.id), { resolved: true });
+      } catch {}
+    }
+    setAlerts(prev => prev.filter(a => !relevantAlerts.some(r => r.id === a.id)));
+  };
+
   if (relevantAlerts.length === 0) return null;
 
   return (
     <section className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-destructive">
+          {relevantAlerts.length} alert{relevantAlerts.length !== 1 ? 's' : ''}
+        </p>
+        {relevantAlerts.length > 1 && (
+          <Button variant="ghost" size="sm" className="text-xs h-7" onClick={handleDismissAll}>
+            Dismiss All
+          </Button>
+        )}
+      </div>
       {relevantAlerts.map((alert) => (
         <div
           key={alert.id}
@@ -86,6 +117,13 @@ export function AlertsList({ circleIds }: AlertsListProps) {
                 : 'just now'}
             </p>
           </div>
+          <button
+            onClick={() => handleDismiss(alert.id)}
+            className="p-1 rounded-md hover:bg-destructive/10 shrink-0"
+            aria-label="Dismiss alert"
+          >
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       ))}
     </section>
