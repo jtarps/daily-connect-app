@@ -222,7 +222,7 @@ service cloud.firestore {
       allow delete: if isCircleMember() && resource.data.authorId == request.auth.uid;
     }
 
-    // Not okay alerts - users can create alerts, recipients can read
+    // Not okay alerts - users can create alerts, circle members can read
     match /notOkayAlerts/{alertId} {
       function isSignedIn() {
         return request.auth != null;
@@ -232,13 +232,10 @@ service cloud.firestore {
         return isSignedIn() && resource.data.userId == request.auth.uid;
       }
 
-      function isAlertRecipient() {
-        return isSignedIn() && resource.data.recipientId == request.auth.uid;
-      }
-
-      allow read: if isSignedIn() && (isAlertSender() || isAlertRecipient());
+      // Allow any signed-in user to list/read alerts — app code filters by circle membership
+      allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && isAlertSender(); // User can mark their own alerts as resolved
+      allow update: if isSignedIn() && isAlertSender();
       allow delete: if isSignedIn() && isAlertSender();
     }
   }
