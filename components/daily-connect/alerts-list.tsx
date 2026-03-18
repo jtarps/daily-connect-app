@@ -1,9 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useFirestore, useUser, useMemoFirebase } from '@/firebase/provider';
-import { useCollection } from '@/firebase/firestore/use-collection';
-import { collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { useMemo, useState, useEffect } from 'react';
+import { useFirestore, useUser } from '@/firebase/provider';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import type { NotOkayAlert } from '@/lib/data';
 import { AlertTriangle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -15,37 +14,52 @@ interface AlertsListProps {
 export function AlertsList({ circleIds }: AlertsListProps) {
   const { user } = useUser();
   const firestore = useFirestore();
+  const [alerts, setAlerts] = useState<NotOkayAlert[]>([]);
 
-  // Query unresolved alerts for circles user is in
-  const alertsQuery = useMemoFirebase(() => {
-    if (!firestore || !user || circleIds.length === 0) return null;
-    return query(
-      collection(firestore, 'notOkayAlerts'),
-      where('resolved', '==', false),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    );
+  // Fetch unresolved alerts (manual query to avoid crashing on permission errors)
+  useEffect(() => {
+    if (!firestore || !user || circleIds.length === 0) return;
+
+    const fetchAlerts = async () => {
+      try {
+        const q = query(
+          collection(firestore, 'notOkayAlerts'),
+          where('resolved', '==', false)
+        );
+        const snapshot = await getDocs(q);
+        const fetched = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as NotOkayAlert));
+        setAlerts(fetched);
+      } catch (err) {
+        // Silently fail — don't crash the page
+        console.error('Error fetching alerts:', err);
+      }
+    };
+
+    fetchAlerts();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchAlerts, 30000);
+    return () => clearInterval(interval);
   }, [firestore, user, circleIds]);
-
-  const { data: allAlerts, isLoading } = useCollection<NotOkayAlert>(alertsQuery);
 
   // Filter to only alerts relevant to user's circles (not sent by user)
   const relevantAlerts = useMemo(() => {
-    if (!allAlerts || !user) return [];
-    return allAlerts.filter(alert => {
-      // Don't show alerts the user sent
-      if (alert.userId === user.uid) return false;
-      // Show alerts for user's circles or sent to all circles
-      if (alert.circleId && circleIds.includes(alert.circleId)) return true;
-      // Show alerts sent to user specifically
-      if (alert.recipientId === user.uid) return true;
-      // Show alerts with no circleId (sent to all circles) if user shares a circle
-      if (!alert.circleId && !alert.recipientId) return true;
-      return false;
-    });
-  }, [allAlerts, user, circleIds]);
+    if (!alerts.length || !user) return [];
+    return alerts
+      .filter(alert => {
+        if (alert.userId === user.uid) return false;
+        if (alert.circleId && circleIds.includes(alert.circleId)) return true;
+        if (alert.recipientId === user.uid) return true;
+        if (!alert.circleId && !alert.recipientId) return true;
+        return false;
+      })
+      .sort((a, b) => {
+        const aTime = a.createdAt?.toDate?.()?.getTime() || 0;
+        const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
+        return bTime - aTime;
+      });
+  }, [alerts, user, circleIds]);
 
-  if (isLoading || relevantAlerts.length === 0) return null;
+  if (relevantAlerts.length === 0) return null;
 
   return (
     <section className="space-y-2">
